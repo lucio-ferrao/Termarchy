@@ -9,6 +9,8 @@ import com.mrndtvndv.term.domain.SshShellChannel
 import com.termux.terminal.TerminalSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** A tab's terminal. [running] turns false when its shell or process exits. */
 data class TerminalEntry(val session: TerminalSession, val running: Boolean)
@@ -34,12 +36,20 @@ class Server(
     /** Terminal per tab id. Mutated and read on the main thread only. */
     val terminals: StateFlow<Map<String, TerminalEntry>> = _terminals
 
+    private val shellCommandsLock = Mutex()
+    private var shellCommands: List<String>? = null
+
     private val channels = mutableMapOf<String, SshShellChannel?>()
     private val disconnectActions = mutableListOf<() -> Unit>()
     private var disconnected = false
 
     fun tabIdFor(session: TerminalSession): String? =
         _terminals.value.entries.firstOrNull { it.value.session === session }?.key
+
+    /** The commands the remote bash completes, for the keyboard; asked once per connection. Empty for local. */
+    suspend fun shellCommands(): List<String> = shellCommandsLock.withLock {
+        shellCommands ?: sshSession?.fetchShellCommands().orEmpty().also { shellCommands = it }
+    }
 
     /** False once the SSH connection died. Always true for local. */
     val isAlive: Boolean

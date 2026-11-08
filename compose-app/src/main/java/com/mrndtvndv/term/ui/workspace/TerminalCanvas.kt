@@ -38,6 +38,9 @@ const val DefaultKeyboardResizeDebounceMillis = 50
 /** Upper bound for the soft-keyboard resize debounce in milliseconds. */
 const val MaxKeyboardResizeDebounceMillis = 100
 
+/** Enter, as the keyboard input reaches the terminal. */
+private const val CARRIAGE_RETURN = 13
+
 /**
  * App integration for the reusable compose terminal library.
  *
@@ -60,6 +63,8 @@ fun TerminalCanvas(
     onOpenUrl: (String) -> Unit,
     isTerminalActive: Boolean,
     imeController: TerminalImeController,
+    /** Enter typed without modifiers, from the keyboard. */
+    onLineSubmitted: () -> Unit = {},
     wallpaperConfig: TerminalWallpaperConfig = TerminalWallpaperConfig(),
     contentTopInsetPx: Int = 0,
     contentBottomInsetPx: Int = 0,
@@ -84,6 +89,7 @@ fun TerminalCanvas(
         onOpenContextMenu = {
             showContextMenu = true
         },
+        onLineSubmitted = onLineSubmitted,
         contentTopInsetPx = contentTopInsetPx,
         contentBottomInsetPx = contentBottomInsetPx,
         blurRegions = blurRegions,
@@ -123,6 +129,7 @@ private fun rememberTerminalCanvasConfig(
     onOpenUrl: (String) -> Unit,
     onCommitContent: (ClipData) -> Boolean,
     onOpenContextMenu: (String) -> Unit,
+    onLineSubmitted: () -> Unit,
     contentTopInsetPx: Int,
     contentBottomInsetPx: Int,
     blurRegions: List<TerminalBlurRegion>,
@@ -147,6 +154,7 @@ private fun rememberTerminalCanvasConfig(
             contentBottomInsetPx = contentBottomInsetPx,
             blurRegions = blurRegions,
             onCodePoint = { codePoint, controlDown, altDown ->
+                if (codePoint == CARRIAGE_RETURN && !controlDown && !altDown) onLineSubmitted()
                 handleTerminalCodePoint(
                     codePoint = codePoint,
                     controlDown = controlDown,

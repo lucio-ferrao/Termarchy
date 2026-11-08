@@ -1,6 +1,7 @@
 package com.termux.terminal.compose.internal
 
 import android.content.ClipData
+import android.os.Bundle
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
@@ -93,6 +94,17 @@ internal class ImeHost(
         node?.restart()
     }
 
+    /** See [com.termux.terminal.compose.TerminalImeController.imeExtras]. */
+    internal var imeExtras: Map<String, List<String>> = emptyMap()
+        private set
+
+    /** Changes the lists for the keyboard, restarting a live input session so the keyboard notices. */
+    fun setImeExtras(extras: Map<String, List<String>>) {
+        if (imeExtras == extras) return
+        imeExtras = extras
+        node?.restart()
+    }
+
     fun close() {
         node?.close()
     }
@@ -163,6 +175,7 @@ internal class ImeHostNode(
                             imeHost.acceptsCommitContent(),
                             imeHost.privateInput,
                             imeHost.privateImeOptions,
+                            imeHost.imeExtras,
                         )
                         val inputConnection = TerminalInputConnection(hostView, imeHost.onEditCommands)
                         @Suppress("DEPRECATION")
@@ -290,6 +303,7 @@ internal fun EditorInfo.configureForTerminal(
     acceptsCommitContent: Boolean,
     privateInput: Boolean = false,
     privateImeOptions: String? = null,
+    imeExtras: Map<String, List<String>> = emptyMap(),
 ) {
     // Private input (a password prompt) is a password field: no suggestions, corrections or learning.
     inputType = InputType.TYPE_CLASS_TEXT or if (privateInput) {
@@ -302,6 +316,10 @@ internal fun EditorInfo.configureForTerminal(
         EditorInfo.IME_FLAG_NO_FULLSCREEN or
         if (privateInput) EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING else 0
     this.privateImeOptions = privateImeOptions
+    if (imeExtras.isNotEmpty()) {
+        val bundle = extras ?: Bundle().also { extras = it }
+        imeExtras.forEach { (key, words) -> bundle.putStringArray(key, words.toTypedArray()) }
+    }
     initialSelStart = 0
     initialSelEnd = 0
     if (acceptsCommitContent) {

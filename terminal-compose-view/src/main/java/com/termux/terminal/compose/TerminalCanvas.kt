@@ -173,6 +173,10 @@ fun TerminalCanvas(
     LaunchedEffect(imeHost, privateImeOptions) {
         imeHost.setPrivateImeOptions(privateImeOptions)
     }
+    val imeExtras = activeImeController.imeExtras
+    LaunchedEffect(imeHost, imeExtras) {
+        imeHost.setImeExtras(imeExtras)
+    }
     LaunchedEffect(config.selectionResetKey) {
         selectionState.clear()
     }

@@ -286,8 +286,8 @@ fun HerdrSessionRoute(
     }
     val agentsButton: @Composable () -> Unit = agentsButton@{
         val statusDotColor = when (agentButtonStatus) {
-            HerdrAgentStatus.Blocked -> MaterialTheme.colorScheme.error
-            HerdrAgentStatus.Done -> MaterialTheme.colorScheme.tertiary
+            HerdrAgentStatus.Blocked -> herdrStatusColors().blocked
+            HerdrAgentStatus.Done -> herdrStatusColors().done
             else -> null
         }
         val buttonDescription = when (agentButtonStatus) {

@@ -54,6 +54,12 @@ class TerminalImeController {
      */
     var privateImeOptions: String? by mutableStateOf(null)
 
+    /**
+     * Lists of words for the keyboard (`EditorInfo.extras`, one string array per key), e.g. the commands and files a
+     * shell can complete. The input session is restarted when they change.
+     */
+    var imeExtras: Map<String, List<String>> by mutableStateOf(emptyMap())
+
     /** The latest visibility reported by the platform window insets. */
     val visibility: TerminalImeVisibility
         get() = visibilityState

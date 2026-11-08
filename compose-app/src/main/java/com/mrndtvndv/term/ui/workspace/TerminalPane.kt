@@ -2,6 +2,7 @@ package com.mrndtvndv.term.ui.workspace
 
 import android.content.ClipData
 import android.graphics.Typeface
+import android.view.KeyEvent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -120,6 +121,8 @@ fun TerminalPane(
     onHostAction: ((KeyBarHostAction) -> Unit)? = null,
     privateInput: Boolean = false,
     keyboardContext: KeyboardContext? = null,
+    imeExtras: Map<String, List<String>> = emptyMap(),
+    onLineSubmitted: () -> Unit = {},
 ) {
     val modifierKeys = remember { ModifierKeys() }
     val imeController = remember(session) { TerminalImeController() }
@@ -127,6 +130,8 @@ fun TerminalPane(
     SideEffect { imeController.privateInput = privateInput }
     // What runs in the pane (an agent, a shell, a full-screen program), so the keyboard can adapt.
     SideEffect { imeController.privateImeOptions = keyboardContext?.imeOption }
+    // What the keyboard can complete there (a shell's commands and files).
+    SideEffect { imeController.imeExtras = imeExtras }
     val density = LocalDensity.current
     val terminalKeyBarClearancePx = with(density) { TerminalKeyBarClearance.toPx() }
     var canvasBounds by remember { mutableStateOf(Rect.Zero) }
@@ -177,6 +182,7 @@ fun TerminalPane(
             onOpenUrl = callbacks.onOpenUrl,
             isTerminalActive = isActive,
             imeController = imeController,
+            onLineSubmitted = onLineSubmitted,
             wallpaperConfig = appearance.wallpaper,
             contentTopInsetPx = WindowInsets.statusBars.getTop(density),
             contentBottomInsetPx = keyBarInsetPx(
@@ -194,7 +200,10 @@ fun TerminalPane(
         KeyBar(
             modifiers = modifierKeys,
             layout = settings.keyBarLayout,
-            onKey = { keyCode -> sendKeyCode(session, keyCode, modifierKeys) },
+            onKey = { keyCode ->
+                if (keyCode == KeyEvent.KEYCODE_ENTER) onLineSubmitted()
+                sendKeyCode(session, keyCode, modifierKeys)
+            },
             onText = { text -> sendKeyBarText(session, text) },
             onMacro = { steps -> sendKeyBarMacro(session, steps) },
             joystickMode = settings.arrowJoystickMode,

@@ -868,11 +868,14 @@ private fun HerdrAgentRowContent(pane: HerdrPane, title: String, onFocus: () -> 
 }
 
 @Composable
-private fun agentStatusColor(status: HerdrAgentStatus): Color = when (status) {
-    HerdrAgentStatus.Working -> MaterialTheme.colorScheme.primary
-    HerdrAgentStatus.Blocked -> MaterialTheme.colorScheme.error
-    HerdrAgentStatus.Done -> MaterialTheme.colorScheme.tertiary
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
+private fun agentStatusColor(status: HerdrAgentStatus): Color = with(herdrStatusColors()) {
+    when (status) {
+        HerdrAgentStatus.Working -> working
+        HerdrAgentStatus.Blocked -> blocked
+        HerdrAgentStatus.Done -> done
+        HerdrAgentStatus.Idle -> idle
+        HerdrAgentStatus.Unknown -> unknown
+    }
 }
 
 @Composable

@@ -56,12 +56,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun AgentsButton(state: ProgramStatusState, onClick: () -> Unit) {
     val urgent = state.mostUrgent()?.state
-    val colors = MaterialTheme.colorScheme
+    val statusColors = herdrStatusColors()
     val alarm = urgent == ProgramState.Blocked || urgent == ProgramState.Error
-    val iconTint = if (alarm) colors.error else colors.onSurface
+    val iconTint = if (alarm) statusColors.blocked else MaterialTheme.colorScheme.onSurface
     val dotColor = when (urgent) {
-        ProgramState.Blocked -> colors.error
-        ProgramState.Done -> colors.primary
+        ProgramState.Blocked -> statusColors.blocked
+        ProgramState.Done -> statusColors.done
         else -> null
     }
     Box(
@@ -74,7 +74,7 @@ fun AgentsButton(state: ProgramStatusState, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         if (urgent == ProgramState.Working) {
-            CircularProgressIndicator(modifier = Modifier.size(30.dp), strokeWidth = 2.dp)
+            CircularProgressIndicator(modifier = Modifier.size(30.dp), color = statusColors.working, strokeWidth = 2.dp)
         }
         Icon(imageVector = Icons.Rounded.SmartToy, contentDescription = null, tint = iconTint)
         dotColor?.let { color ->
@@ -238,9 +238,11 @@ private fun statusLabel(item: ProgramStatusItem): String = when (item.state) {
 }
 
 @Composable
-private fun statusColor(item: ProgramStatusItem): Color = when (item.state) {
-    ProgramState.Blocked, ProgramState.Error -> MaterialTheme.colorScheme.error
-    ProgramState.Done -> MaterialTheme.colorScheme.tertiary
-    ProgramState.Working -> MaterialTheme.colorScheme.primary
-    ProgramState.Idle -> MaterialTheme.colorScheme.onSurfaceVariant
+private fun statusColor(item: ProgramStatusItem): Color = with(herdrStatusColors()) {
+    when (item.state) {
+        ProgramState.Blocked, ProgramState.Error -> blocked
+        ProgramState.Done -> done
+        ProgramState.Working -> working
+        ProgramState.Idle -> idle
+    }
 }

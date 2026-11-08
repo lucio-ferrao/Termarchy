@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -37,10 +38,15 @@ import com.mrndtvndv.term.herdr.HerdrState
 import com.mrndtvndv.term.herdr.KeyboardContext
 import com.mrndtvndv.term.herdr.keyboardContextOf
 import com.mrndtvndv.term.workspace.isHerdrFullUiTab
+import com.mrndtvndv.term.server.Server
 import com.mrndtvndv.term.server.TerminalEntry
+import com.mrndtvndv.term.server.isCompletingShell
+import com.mrndtvndv.term.server.listFolder
+import com.mrndtvndv.term.server.shellCompletionsImeExtras
 import com.mrndtvndv.term.workspace.Tab
 import com.mrndtvndv.term.workspace.remoteAttachmentEndText
 import com.termux.terminal.TerminalSession
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 
@@ -83,6 +89,16 @@ fun TerminalTab(
     } else {
         herdrPane?.let { keyboardContextOf(it.agent, it.foregroundProcess, it.alternateScreen) }
     }
+    // Lines sent from this tab, so the shell's folder is read and listed again after each command.
+    var submittedLines by remember { mutableIntStateOf(0) }
+    val completingShell = keyboardContext?.kind == KeyboardContext.Kind.SHELL &&
+        isCompletingShell(keyboardContext.program) && !passwordInput && isActive
+    val shellCompletions = rememberShellCompletions(
+        server = appViewModel.getServer(serverId),
+        wanted = completingShell,
+        folder = herdrPane?.let { it.foregroundCwd ?: it.cwd },
+        submittedLines = submittedLines,
+    )
     var attempt by remember { mutableIntStateOf(0) }
     var failure by remember { mutableStateOf<String?>(null) }
     val currentIsActive by rememberUpdatedState(isActive)
@@ -112,6 +128,8 @@ fun TerminalTab(
                 callbacks = paneCallbacks(entry.session),
                 privateInput = passwordInput,
                 keyboardContext = keyboardContext,
+                imeExtras = shellCompletions,
+                onLineSubmitted = { submittedLines++ },
             )
             if (!entry.running) {
                 // A remote attachment says what the native end facts show, and nothing more: unknown ends stay unknown.
@@ -153,6 +171,8 @@ private fun TerminalSessionPane(
     callbacks: TerminalPaneCallbacks,
     privateInput: Boolean,
     keyboardContext: KeyboardContext?,
+    imeExtras: Map<String, List<String>>,
+    onLineSubmitted: () -> Unit,
 ) {
     val progress by workspaceViewModel.observeTerminalProgress(session).collectAsStateWithLifecycle()
     val programStatus by workspaceViewModel.observeProgramStatus(session).collectAsStateWithLifecycle()
@@ -168,9 +188,53 @@ private fun TerminalSessionPane(
         onHostAction = onHostAction,
         privateInput = privateInput,
         keyboardContext = keyboardContext,
+        imeExtras = imeExtras,
+        onLineSubmitted = onLineSubmitted,
         callbacks = callbacks,
     )
 }
+
+/**
+ * The commands of the remote bash and the entries of the pane's [folder], for the keyboard to complete in a shell. A
+ * `cd` sends no herdr event, so after each line herdr is asked again for the pane's folder, and the folder is listed
+ * again (a command may have added or removed files). Without herdr there is no folder: only the commands.
+ */
+@Composable
+private fun rememberShellCompletions(
+    server: Server?,
+    wanted: Boolean,
+    folder: String?,
+    submittedLines: Int,
+): Map<String, List<String>> {
+    val commands by produceState(emptyList<String>(), server, wanted) {
+        if (wanted && server != null) value = server.shellCommands()
+    }
+    LaunchedEffect(server, submittedLines) {
+        val herdr = server?.herdr
+        if (submittedLines == 0 || herdr == null) return@LaunchedEffect
+        delay(FOLDER_SETTLE_MILLIS)
+        herdr.refresh()
+    }
+    val files by produceState(emptyList<String>(), server, wanted, folder, submittedLines) {
+        val ssh = server?.sshSession
+        if (!wanted || ssh == null || folder == null) {
+            value = emptyList()
+            return@produceState
+        }
+        // Waits for herdr's answer after a line, so a `cd` lists the new folder rather than the old one first.
+        if (submittedLines > 0) delay(LISTING_DELAY_MILLIS)
+        value = ssh.listFolder(folder)
+    }
+    return remember(wanted, commands, files) {
+        if (wanted) shellCompletionsImeExtras(commands, files) else emptyMap()
+    }
+}
+
+/** Time for the command of a line to change folder before herdr is asked (a `cd` takes a few milliseconds). */
+private const val FOLDER_SETTLE_MILLIS = 200L
+
+/** After a line, the folder is listed once herdr had the time to report a new one. */
+private const val LISTING_DELAY_MILLIS = 600L
 
 @Composable
 private fun OpeningTerminal(failure: String?, onRetry: () -> Unit) {
