@@ -14,7 +14,7 @@ class ShellCommandsTest {
 
     // Every command starts by appending the login shell's PATH, then runs through sh.
     private val loginPath =
-        "PATH=\"\$PATH:\$(\"\${SHELL:-/bin/sh}\" -l -c 'printenv PATH' 2>/dev/null)\"; export PATH; "
+        "PATH=\"\$PATH:\$(\"\${SHELL:-/bin/sh}\" -l -c 'printenv PATH' 2>/dev/null):\$HOME/.local/bin\"; export PATH; "
 
     private fun wrapped(script: String) = "sh -c " + shellQuote(loginPath + script)
 

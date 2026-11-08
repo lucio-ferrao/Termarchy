@@ -11,6 +11,7 @@
 #include <libssh2_sftp.h>
 #include <unistd.h>
 #include <poll.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>

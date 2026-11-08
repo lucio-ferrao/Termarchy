@@ -9,6 +9,13 @@
     public void onNativeSshClosed();
 }
 
+# The native SSH authentication calls sign(byte[]) on the signer it is given (a lambda), through JNI: R8 must not merge
+# or outline that method.
+-keep interface com.termux.terminal.GhosttyNative$SshSigner { *; }
+-keep class * implements com.termux.terminal.GhosttyNative$SshSigner {
+    public byte[] sign(byte[]);
+}
+
 # Prevent warnings for optional security/crypto providers
 -dontwarn org.openjsse.**
 -dontwarn sun.security.x509.X509Key

@@ -51,7 +51,7 @@ class GitResetOperations(
 internal suspend fun getRepoRoot(execCommand: suspend (String) -> String, dir: String): String {
     return runCatching {
         val command = "export PATH=\$PATH:/opt/homebrew/bin:/usr/local/bin; " +
-            "cd \"$dir\" && git rev-parse --show-toplevel"
+            "cd ${shellQuote(dir)} && git rev-parse --show-toplevel"
         val output = execCommand(command).trim()
         if (output.isNotEmpty() && !output.startsWith("fatal:") && !output.contains("error")) {
             output

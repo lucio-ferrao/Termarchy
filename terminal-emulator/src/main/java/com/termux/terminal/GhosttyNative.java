@@ -171,7 +171,26 @@ public final class GhosttyNative {
     @Nullable
     static native String nativeGetTranscriptText(long nativeHandle, int flags);
 
-    public static native long nativeSshInit(int socketFd, String username, String passwordOrKey, boolean isPassword);
+    /** Signs SSH user authentication data with a key the app holds; returns the SSH signature blob, or null to refuse. */
+    public interface SshSigner {
+        @Nullable
+        byte[] sign(byte[] data);
+    }
+
+    /** {@link #nativeSshInit} result: the server's host key is new or differs from the expected one. */
+    public static final long SSH_INIT_HOST_KEY_REJECTED = -2;
+    /** {@link #nativeSshInit} result: the server did not accept the public key, or signing was refused. */
+    public static final long SSH_INIT_AUTH_FAILED = -3;
+
+    /**
+     * Opens an SSH session on {@code socketFd}: checks the server's host key against {@code expectedHostKey}
+     * (SHA-256, null when none is known yet) before authenticating, and writes the one it saw to
+     * {@code seenHostKey} (32 bytes). Then authenticates {@code username} with {@code publicKey} (an SSH public key
+     * blob), signing through {@code signer}. Returns a session handle, 0 on failure, or one of the
+     * {@code SSH_INIT_} results.
+     */
+    public static native long nativeSshInit(int socketFd, String username, byte[] publicKey, SshSigner signer,
+                                            @Nullable byte[] expectedHostKey, byte[] seenHostKey);
     public static native void nativeSshStart(long sessionHandle);
     public static native void nativeSshDeinit(long sessionHandle);
     /** False once the SSH connection has died or was torn down. */

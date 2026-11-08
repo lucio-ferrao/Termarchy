@@ -5,9 +5,10 @@ fun shellQuote(value: String): String = "'" + value.replace("'", "'\\''") + "'"
 
 // sshd runs exec commands through the user's login shell, which may be fish, so wrap everything in sh.
 // That shell skips login setup, so Homebrew and similar dirs can be missing from PATH. Append the PATH
-// a login shell would have, so tools resolve the same way they do in a terminal.
+// a login shell would have, so tools resolve the same way they do in a terminal, and last ~/.local/bin, where
+// herdr is often installed but which some login shells only add when interactive.
 private fun loginScript(script: String): String = "sh -c " + shellQuote(
-    "PATH=\"\$PATH:\$(\"\${SHELL:-/bin/sh}\" -l -c 'printenv PATH' 2>/dev/null)\"; export PATH; $script",
+    "PATH=\"\$PATH:\$(\"\${SHELL:-/bin/sh}\" -l -c 'printenv PATH' 2>/dev/null):\$HOME/.local/bin\"; export PATH; $script",
 )
 
 /** A plain login shell in the tab's directory. Ends with the SSH connection, as it always has. */

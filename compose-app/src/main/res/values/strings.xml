@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Status of a Herdr pane's agent, under the name of its launcher shortcut -->
+    <string name="herdr_shortcut_working">working</string>
+    <string name="herdr_shortcut_blocked">waiting for you</string>
+    <string name="herdr_shortcut_done">done</string>
+    <string name="herdr_shortcut_idle">idle</string>
+</resources>

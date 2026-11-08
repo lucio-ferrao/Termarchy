@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import android.util.Log
+import com.mrndtvndv.term.domain.HostKeyException
 import com.mrndtvndv.term.domain.ServerConfig
 import com.mrndtvndv.term.herdr.FocusBridgeMaintenance
 import com.mrndtvndv.term.herdr.FocusBridgeUiState
@@ -57,7 +58,12 @@ data class ServerListUiState(
     val localConfig: ServerConfig? = null,
     /** Why saved servers cannot be read or written, shown in place of the list. Null when storage is healthy. */
     val storageError: String? = null,
+    /** A server whose host key is new or changed, waiting for the user to trust it or not. */
+    val hostKeyPrompt: HostKeyPrompt? = null,
 )
+
+/** The host key [seen] on [server], which is not the saved one: [expected] is null on the first connection. */
+data class HostKeyPrompt(val server: ServerConfig, val seen: String, val expected: String?)
 
 /** Tab kinds that can be added from the workspace tab strip. */
 enum class TabType { Terminal, Sftp, Git }
@@ -195,8 +201,11 @@ class AppViewModel(
     fun updateServer(config: ServerConfig) {
         // The focus helper opt-in belongs to Install and Remove. A form save keeps the stored value, so a save never
         // reverts an install or removal that happened while the form was open.
-        val stored = serverRepository.get(config.id)?.herdrFocusBridgeEnabled ?: config.herdrFocusBridgeEnabled
-        afterWrite(serverRepository.update(config.copy(herdrFocusBridgeEnabled = stored)))
+        val existing = serverRepository.get(config.id)
+        val stored = existing?.herdrFocusBridgeEnabled ?: config.herdrFocusBridgeEnabled
+        // The trusted host key belongs to that host and port: another address must be trusted again.
+        val hostKey = existing?.takeIf { it.host == config.host && it.port == config.port }?.hostKeySha256
+        afterWrite(serverRepository.update(config.copy(herdrFocusBridgeEnabled = stored, hostKeySha256 = hostKey)))
     }
 
     fun deleteServer(id: String) {
@@ -421,7 +430,15 @@ class AppViewModel(
                     if (navigationIntent == navigation) onConnected(server)
                 },
                 onFailure = { error ->
-                    _serverListState.update { it.copy(connectingId = null, error = error.message) }
+                    val server = serverRepository.get(serverId)
+                    if (error is HostKeyException && server != null) {
+                        _serverListState.update {
+                            it.copy(connectingId = null, hostKeyPrompt = HostKeyPrompt(server, error.seen, error.expected))
+                        }
+                    } else {
+                        _serverListState.update { it.copy(connectingId = null, error = error.message) }
+                        notificationState.post("Couldn't connect", error.message)
+                    }
                     // Don't reopen a dead connection's workspace on every launch.
                     if (repository.state.value.activeWorkspace?.serverId == serverId) repository.deactivate()
                 },
@@ -445,6 +462,19 @@ class AppViewModel(
             saveServer(config)
         }
         connect(config.id)
+    }
+
+    /** Saves the host key of [HostKeyPrompt] as this server's and connects again. */
+    fun trustHostKey() {
+        val prompt = _serverListState.value.hostKeyPrompt ?: return
+        _serverListState.update { it.copy(hostKeyPrompt = null) }
+        val server = serverRepository.get(prompt.server.id) ?: return reportUnknownServer()
+        afterWrite(serverRepository.update(server.copy(hostKeySha256 = prompt.seen)))
+        connect(server.id)
+    }
+
+    fun dismissHostKeyPrompt() {
+        _serverListState.update { it.copy(hostKeyPrompt = null) }
     }
 
     fun disconnect(id: String) {

@@ -10,7 +10,11 @@ data class ServerConfig(
     val host: String = "",
     val port: Int = 22,
     val username: String = "",
-    val auth: AuthType? = null,
+    /**
+     * SHA-256 of the server's host key, as [hostKeyFingerprint] writes it, saved when the user trusts it on the first
+     * connection. A server that shows another key is refused before authentication.
+     */
+    val hostKeySha256: String? = null,
     val useGhosttyTerm: Boolean = false,
     val isLocal: Boolean = false,
     val startupCommand: String? = null,
@@ -45,16 +49,4 @@ data class ServerConfig(
 
     /** Terminal type string sent to the SSH server */
     val termType: String get() = if (useGhosttyTerm) "xterm-ghostty" else "xterm-256color"
-}
-
-@Serializable
-sealed interface AuthType {
-    @Serializable
-    data class Password(val password: String) : AuthType
-
-    @Serializable
-    data class PublicKey(
-        val privateKeyPem: String,
-        val passphrase: String? = null,
-    ) : AuthType
 }

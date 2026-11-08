@@ -1,7 +1,6 @@
 package com.mrndtvndv.term.herdr
 
 import com.mrndtvndv.term.domain.SftpClient
-import com.mrndtvndv.term.domain.SshAuth
 import com.mrndtvndv.term.domain.SshConfig
 import com.mrndtvndv.term.domain.SshSession
 import com.mrndtvndv.term.domain.SshShellChannel
@@ -356,7 +355,8 @@ internal class FakeHerdrSession(private val server: FakeHerdrServer) : SshSessio
     override val isAlive: Boolean = true
 
     override suspend fun connect(config: SshConfig) = Unit
-    override suspend fun authenticate(auth: SshAuth) = Unit
+    override suspend fun authenticate(publicKey: ByteArray, sign: (ByteArray) -> ByteArray?, hostKeySha256: String?) =
+        Unit
     override suspend fun openShellChannel(termType: String, cols: Int, rows: Int, command: String?): SshShellChannel =
         error("not used by Herdr tests")
     override suspend fun openSftpClient(): SftpClient = error("not used by Herdr tests")

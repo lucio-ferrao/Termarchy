@@ -7,7 +7,12 @@ interface SshSession {
     /** False once the connection died; checked from the native side, so it can change without a callback. */
     val isAlive: Boolean
     suspend fun connect(config: SshConfig)
-    suspend fun authenticate(auth: SshAuth)
+    /**
+     * Checks the server's host key against [hostKeySha256] (as [hostKeyFingerprint] writes it, null when none is
+     * known yet) and throws [HostKeyException] when it is new or different, before any authentication. Then
+     * authenticates with [publicKey] (an SSH public key blob), signing the authentication data with [sign].
+     */
+    suspend fun authenticate(publicKey: ByteArray, sign: (ByteArray) -> ByteArray?, hostKeySha256: String?)
     /** Opens a PTY channel running [command], or the login shell when null. */
     suspend fun openShellChannel(
         termType: String,

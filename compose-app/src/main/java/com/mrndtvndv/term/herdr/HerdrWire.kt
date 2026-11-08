@@ -248,6 +248,7 @@ private class PaneDto(
     val agent: String? = null,
     val title: String? = null,
     @SerialName("terminal_title") val terminalTitle: String? = null,
+    @SerialName("terminal_title_stripped") val terminalTitleStripped: String? = null,
     @SerialName("display_agent") val displayAgent: String? = null,
     @SerialName("agent_status") val agentStatus: String = "unknown",
     @SerialName("state_labels") val stateLabels: Map<String, String> = emptyMap(),
@@ -274,6 +275,7 @@ private class PaneDto(
         tokens = tokens,
         scroll = scroll?.toModel(),
         revision = revision,
+        terminalTitleStripped = terminalTitleStripped,
     )
 }
 

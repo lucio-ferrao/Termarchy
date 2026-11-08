@@ -785,42 +785,66 @@ fn throwJavaRuntimeException(env: *c.JNIEnv, message: []const u8) void {
     _ = env.*.*.ThrowNew.?(env, exception_class, message_c.ptr);
 }
 
+/// nativeSshInit results besides a session handle. Mirrored in GhosttyNative.
+const ssh_init_failed: jlong = 0;
+const ssh_init_host_key_rejected: jlong = -2;
+const ssh_init_auth_failed: jlong = -3;
+
 pub export fn Java_com_termux_terminal_GhosttyNative_nativeSshInit(
     env: ?*c.JNIEnv,
     clazz: c.jclass,
     socket_fd: jint,
     username: c.jstring,
-    password_or_key: c.jstring,
-    is_password: jboolean,
+    public_key: c.jbyteArray,
+    signer: c.jobject,
+    expected_host_key: c.jbyteArray,
+    seen_host_key: c.jbyteArray,
 ) jlong {
     _ = clazz;
-    const jni = env orelse return 0;
-    if (username == null or password_or_key == null) return 0;
+    const jni = env orelse return ssh_init_failed;
+    if (username == null or public_key == null or signer == null or seen_host_key == null) return ssh_init_failed;
 
     const username_chars = jni.*.*.GetStringUTFChars.?(jni, username, null);
     defer jni.*.*.ReleaseStringUTFChars.?(jni, username, username_chars);
     const username_slice = std.mem.span(username_chars);
 
-    const pass_key_chars = jni.*.*.GetStringUTFChars.?(jni, password_or_key, null);
-    defer jni.*.*.ReleaseStringUTFChars.?(jni, password_or_key, pass_key_chars);
-    const pass_key_slice = std.mem.span(pass_key_chars);
+    const public_key_len: usize = @intCast(jni.*.*.GetArrayLength.?(jni, public_key));
+    const public_key_bytes = native_allocator.alloc(u8, public_key_len) catch return ssh_init_failed;
+    defer native_allocator.free(public_key_bytes);
+    jni.*.*.GetByteArrayRegion.?(jni, public_key, 0, @intCast(public_key_len), @ptrCast(public_key_bytes.ptr));
 
-    const is_pass = (is_password != c.JNI_FALSE);
+    var expected_buffer: [ssh.SshNativeSession.host_key_len]u8 = undefined;
+    const expected: ?[]const u8 = if (expected_host_key != null and
+        jni.*.*.GetArrayLength.?(jni, expected_host_key) == expected_buffer.len)
+    blk: {
+        jni.*.*.GetByteArrayRegion.?(jni, expected_host_key, 0, expected_buffer.len, @ptrCast(&expected_buffer));
+        break :blk &expected_buffer;
+    } else null;
 
     var java_vm: ?*c.JavaVM = null;
     _ = jni.*.*.GetJavaVM.?(jni, &java_vm);
 
+    var signer_ctx: ssh.SshNativeSession.Signer = .{ .env = jni, .signer = signer };
+    var seen: [ssh.SshNativeSession.host_key_len]u8 = std.mem.zeroes([ssh.SshNativeSession.host_key_len]u8);
     const session = ssh.SshNativeSession.init(
         native_allocator,
         socket_fd,
         username_slice,
-        pass_key_slice,
-        is_pass,
+        public_key_bytes,
+        &signer_ctx,
+        expected,
+        &seen,
         java_vm,
     ) catch |err| {
         ghostty_log.err("nativeSshInit failed: {}", .{err});
-        return 0;
+        jni.*.*.SetByteArrayRegion.?(jni, seen_host_key, 0, seen.len, @ptrCast(&seen));
+        return switch (err) {
+            error.HostKeyRejected => ssh_init_host_key_rejected,
+            error.AuthFailed => ssh_init_auth_failed,
+            else => ssh_init_failed,
+        };
     };
+    jni.*.*.SetByteArrayRegion.?(jni, seen_host_key, 0, seen.len, @ptrCast(&seen));
 
     return @intCast(@intFromPtr(session));
 }

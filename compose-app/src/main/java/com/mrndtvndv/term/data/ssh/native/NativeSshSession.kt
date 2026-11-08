@@ -69,27 +69,46 @@ class NativeSshSession : SshSession {
     }
 
     @Suppress("TooGenericExceptionCaught")
-    override suspend fun authenticate(auth: SshAuth) {
+    override suspend fun authenticate(publicKey: ByteArray, sign: (ByteArray) -> ByteArray?, hostKeySha256: String?) {
         withContext(Dispatchers.IO) {
             val s = socket ?: throw IllegalStateException("Not connected")
             val currentConfig = config ?: throw IllegalStateException("Config missing")
             val fd = ParcelFileDescriptor.fromSocket(s).detachFd()
-            val isPassword = auth is SshAuth.Password
-            val passwordOrKey = when (auth) {
-                is SshAuth.Password -> String(auth.password)
-                is SshAuth.PublicKey -> auth.privateKeyPem
-            }
+            val seenHostKey = ByteArray(32)
+            val expectedHostKey = hostKeySha256?.removePrefix("SHA256:")
+                ?.let { android.util.Base64.decode(it, android.util.Base64.NO_PADDING) }
 
             synchronized(lock) {
                 val handle = try {
-                    GhosttyNative.nativeSshInit(fd, currentConfig.username, passwordOrKey, isPassword)
+                    GhosttyNative.nativeSshInit(
+                        fd,
+                        currentConfig.username,
+                        publicKey,
+                        GhosttyNative.SshSigner { data -> sign(data) },
+                        expectedHostKey,
+                        seenHostKey,
+                    )
                 } catch (e: Throwable) {
                     com.termux.terminal.JNI.close(fd)
                     throw e
                 }
-                if (handle == 0L) {
-                    com.termux.terminal.JNI.close(fd)
-                    throw IllegalStateException("Failed to initialize native SSH session")
+                when (handle) {
+                    0L -> {
+                        com.termux.terminal.JNI.close(fd)
+                        throw IllegalStateException("Failed to initialize native SSH session")
+                    }
+                    GhosttyNative.SSH_INIT_HOST_KEY_REJECTED -> {
+                        com.termux.terminal.JNI.close(fd)
+                        throw HostKeyException(hostKeyFingerprint(seenHostKey), hostKeySha256)
+                    }
+                    GhosttyNative.SSH_INIT_AUTH_FAILED -> {
+                        com.termux.terminal.JNI.close(fd)
+                        throw IOException(
+                            "The server did not accept this phone's SSH key, or the fingerprint was not given. " +
+                                "Its public key must be in ~/.ssh/authorized_keys of ${currentConfig.username} " +
+                                "on the server.",
+                        )
+                    }
                 }
                 nativeSessionHandle = handle
                 GhosttyNative.nativeSshStart(handle)

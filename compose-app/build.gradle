@@ -48,7 +48,9 @@ android {
     defaultConfig {
         applicationId "com.mrndtvndv.term"
         minSdk project.properties.minSdkVersion.toInteger()
-        targetSdk project.properties.targetSdkVersion.toInteger()
+        // the Termux app stays at 28 (it runs programs from its data folder); Ecto does not, and Play Protect blocks
+        // apps that target an old Android
+        targetSdk 36
         versionCode 28
         versionName "4.13.1"
     }

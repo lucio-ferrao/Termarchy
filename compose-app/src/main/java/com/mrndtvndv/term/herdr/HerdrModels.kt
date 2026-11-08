@@ -128,6 +128,8 @@ data class HerdrPane(
     val tokens: Map<String, String>,
     val scroll: HerdrScroll?,
     val revision: Long,
+    /** [terminalTitle] without the agent's status glyph, e.g. the title of a Claude conversation. */
+    val terminalTitleStripped: String? = null,
 )
 
 data class HerdrAgent(

@@ -1,18 +1,22 @@
 package com.mrndtvndv.term.ui.addserver
 
+import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.mrndtvndv.term.domain.AuthType
+import com.mrndtvndv.term.data.ssh.DeviceSshKey
 import com.mrndtvndv.term.domain.ServerConfig
 import com.mrndtvndv.term.herdr.FocusBridgeUiState
 import com.mrndtvndv.term.ui.components.ImagePasteSettingsSection
@@ -29,12 +33,10 @@ fun AddServerScreen(
     focusBridge: FocusBridgeControls? = null,
     modifier: Modifier = Modifier,
 ) {
-    val initialPassword = (initialConfig?.auth as? AuthType.Password)?.password.orEmpty()
     var label by remember(initialConfig) { mutableStateOf(initialConfig?.label ?: "") }
     var host by remember(initialConfig) { mutableStateOf(initialConfig?.host ?: "") }
     var portString by remember(initialConfig) { mutableStateOf(initialConfig?.port?.toString() ?: "22") }
     var username by remember(initialConfig) { mutableStateOf(initialConfig?.username ?: "") }
-    val passwordState = remember(initialConfig) { TextFieldState(initialPassword) }
     var useGhosttyTerm by remember(initialConfig) { mutableStateOf(initialConfig?.useGhosttyTerm ?: false) }
     var herdrEnabled by remember(initialConfig) { mutableStateOf(initialConfig?.herdrEnabled ?: false) }
     var herdrSocketPath by remember(initialConfig) { mutableStateOf(initialConfig?.herdrSocketPath.orEmpty()) }
@@ -94,11 +96,7 @@ fun AddServerScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            OutlinedSecureTextField(
-                state = passwordState,
-                label = { Text("Password") },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            PhoneKeySection()
 
             SwitchOption(
                 title = "Use xterm-ghostty",
@@ -134,7 +132,6 @@ fun AddServerScreen(
                             host = host,
                             port = parsePort(portString),
                             username = username,
-                            auth = AuthType.Password(passwordState.text.toString()),
                             useGhosttyTerm = useGhosttyTerm,
                             herdrEnabled = herdrEnabled,
                             herdrSocketPath = herdrSocketPath.trim().ifEmpty { null },
@@ -154,6 +151,63 @@ fun AddServerScreen(
                 Text("Save")
             }
         }
+    }
+}
+
+/**
+ * The phone's SSH key, the only way to sign in: its public key to put in ~/.ssh/authorized_keys on the server, or a
+ * button to make it. The private key stays in the phone's Keystore and each login asks for a fingerprint.
+ */
+@Composable
+private fun PhoneKeySection() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+        Text("SSH needs Android 9 or later.", color = MaterialTheme.colorScheme.error)
+        return
+    }
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val key = remember { DeviceSshKey(context) }
+    var publicKey by remember { mutableStateOf(runCatching { key.publicKeyLine() }.getOrNull()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var confirmReplace by remember { mutableStateOf(false) }
+    val make = {
+        error = runCatching { key.generate() }.exceptionOrNull()?.let { "Could not make the key: ${it.message}" }
+        publicKey = runCatching { key.publicKeyLine() }.getOrNull()
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Sign in with this phone's key")
+        Text(
+            "The key never leaves the phone (Keystore) and each login asks for your fingerprint. Put the public key " +
+                "in ~/.ssh/authorized_keys of this user on the server. One key serves all servers.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        publicKey?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        }
+        error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (publicKey != null) {
+                Button(onClick = { clipboard.setText(AnnotatedString(publicKey.orEmpty())) }) { Text("Copy public key") }
+                TextButton(onClick = { confirmReplace = true }) { Text("Make a new key") }
+            } else {
+                Button(onClick = make) { Text("Make the key") }
+            }
+        }
+    }
+    if (confirmReplace) {
+        AlertDialog(
+            onDismissRequest = { confirmReplace = false },
+            title = { Text("Make a new key?") },
+            text = { Text("The current key stops working on every server until the new public key is put there.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmReplace = false
+                    make()
+                }) { Text("Make a new key", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmReplace = false }) { Text("Cancel") } },
+        )
     }
 }
 

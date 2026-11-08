@@ -26,7 +26,13 @@ class ServerRepository(
         // Only a missing key means nothing was saved. Any stored text, blank included, must decode in full.
         val raw = prefs.getString(KEY_SAVED_SERVERS, null) ?: return SavedServersLoad.Loaded(emptyList())
         return try {
-            SavedServersLoad.Loaded(SavedServerCodec.decode(raw))
+            val servers = SavedServerCodec.decode(raw)
+            // Older versions saved a password (or a private key) in plain text under "auth". The phone's Keystore key
+            // replaced them, and decoding drops that field, so the list is rewritten at once without it.
+            if (SavedServerCodec.hasLegacyAuth(raw)) {
+                prefs.edit().putString(KEY_SAVED_SERVERS, SavedServerCodec.encode(servers)).apply()
+            }
+            SavedServersLoad.Loaded(servers)
         } catch (e: SavedServerCodec.UnreadableException) {
             SavedServersLoad.Unreadable(e.message.orEmpty())
         }

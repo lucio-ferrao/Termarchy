@@ -906,12 +906,61 @@ pub const SshNativeSession = struct {
         }
     }
 
+    /// Length of a SHA-256 host key fingerprint.
+    pub const host_key_len = 32;
+
+    /// Signs the user authentication data through the app: the private key stays in the Android Keystore, so
+    /// libssh2 hands the data to [signer] (a GhosttyNative.SshSigner) and gets back the SSH signature blob.
+    pub const Signer = struct {
+        env: *c.JNIEnv,
+        signer: c.jobject,
+    };
+
+    fn signCallback(
+        session: ?*c.LIBSSH2_SESSION,
+        sig: [*c][*c]u8,
+        sig_len: [*c]usize,
+        data: [*c]const u8,
+        data_len: usize,
+        abstract: [*c]?*anyopaque,
+    ) callconv(.c) c_int {
+        _ = session;
+        const ctx: *Signer = @ptrCast(@alignCast(abstract.*));
+        const env = ctx.env;
+        const data_array = env.*.*.NewByteArray.?(env, @intCast(data_len)) orelse return -1;
+        defer env.*.*.DeleteLocalRef.?(env, data_array);
+        env.*.*.SetByteArrayRegion.?(env, data_array, 0, @intCast(data_len), @ptrCast(data));
+        const signer_class = env.*.*.GetObjectClass.?(env, ctx.signer) orelse return -1;
+        defer env.*.*.DeleteLocalRef.?(env, signer_class);
+        const sign_method = env.*.*.GetMethodID.?(env, signer_class, "sign", "([B)[B") orelse return -1;
+        const result = env.*.*.CallObjectMethod.?(env, ctx.signer, sign_method, data_array);
+        if (env.*.*.ExceptionCheck.?(env) != c.JNI_FALSE) {
+            env.*.*.ExceptionClear.?(env);
+            return -1;
+        }
+        const result_array: c.jbyteArray = @ptrCast(result orelse return -1);
+        defer env.*.*.DeleteLocalRef.?(env, result_array);
+        const len: usize = @intCast(env.*.*.GetArrayLength.?(env, result_array));
+        // libssh2 frees the signature with its default allocator, which is malloc.
+        const buffer: [*c]u8 = @ptrCast(c.malloc(len) orelse return -1);
+        env.*.*.GetByteArrayRegion.?(env, result_array, 0, @intCast(len), @ptrCast(buffer));
+        sig.* = buffer;
+        sig_len.* = len;
+        return 0;
+    }
+
+    /// Opens the SSH session on [socket_fd]. The server's host key is checked right after the handshake, before any
+    /// authentication: its SHA-256 goes to [seen_host_key], and the connection is refused (error.HostKeyRejected)
+    /// unless it equals [expected_host_key], so a new or changed server never gets a signature. Then it authenticates
+    /// [username] with [public_key] (an SSH public key blob), signing through [signer].
     pub fn init(
         allocator: std.mem.Allocator,
         socket_fd: c_int,
         username: []const u8,
-        password_or_key: []const u8,
-        is_password: bool,
+        public_key: []const u8,
+        signer: *Signer,
+        expected_host_key: ?[]const u8,
+        seen_host_key: *[host_key_len]u8,
         java_vm: ?*c.JavaVM,
     ) !*SshNativeSession {
         _ = c.libssh2_init(0);
@@ -936,44 +985,31 @@ pub const SshNativeSession = struct {
             return error.HandshakeFailed;
         }
 
-        if (is_password) {
-            const password_c = try allocator.dupeSentinel(u8, password_or_key, 0);
-            defer allocator.free(password_c);
-            while (true) {
-                const rc = c.libssh2_userauth_password_ex(
-                    session,
-                    username.ptr,
-                    @intCast(username.len),
-                    password_c.ptr,
-                    @intCast(password_or_key.len),
-                    null,
-                );
-                if (rc == 0) break;
-                if (rc == c.LIBSSH2_ERROR_EAGAIN) {
-                    try waitSocket(socket_fd, session);
-                    continue;
-                }
-                return error.AuthFailed;
+        const host_key_hash = c.libssh2_hostkey_hash(session, c.LIBSSH2_HOSTKEY_HASH_SHA256) orelse
+            return error.HandshakeFailed;
+        @memcpy(seen_host_key, @as([*]const u8, @ptrCast(host_key_hash))[0..host_key_len]);
+        const expected = expected_host_key orelse return error.HostKeyRejected;
+        if (!std.mem.eql(u8, expected, seen_host_key)) return error.HostKeyRejected;
+
+        const username_c = try allocator.dupeSentinel(u8, username, 0);
+        defer allocator.free(username_c);
+        // libssh2 passes this to signCallback as its abstract pointer.
+        var abstract: ?*anyopaque = signer;
+        while (true) {
+            const rc = c.libssh2_userauth_publickey(
+                session,
+                username_c.ptr,
+                public_key.ptr,
+                public_key.len,
+                signCallback,
+                &abstract,
+            );
+            if (rc == 0) break;
+            if (rc == c.LIBSSH2_ERROR_EAGAIN) {
+                try waitSocket(socket_fd, session);
+                continue;
             }
-        } else {
-            while (true) {
-                const rc = c.libssh2_userauth_publickey_frommemory(
-                    session,
-                    username.ptr,
-                    username.len,
-                    null,
-                    0,
-                    password_or_key.ptr,
-                    password_or_key.len,
-                    null,
-                );
-                if (rc == 0) break;
-                if (rc == c.LIBSSH2_ERROR_EAGAIN) {
-                    try waitSocket(socket_fd, session);
-                    continue;
-                }
-                return error.AuthFailed;
-            }
+            return error.AuthFailed;
         }
 
         // Keep idle sessions from surviving a dead Wi-Fi link indefinitely.

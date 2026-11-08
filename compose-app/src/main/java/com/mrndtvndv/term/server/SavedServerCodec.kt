@@ -35,6 +35,10 @@ object SavedServerCodec {
         return entries.mapIndexed { index, element -> decodeEntry(index, element) }
     }
 
+    /** True when an entry still holds the "auth" secrets (password or private key) of older versions. */
+    fun hasLegacyAuth(raw: String): Boolean =
+        (parseText(raw) as? JsonArray).orEmpty().any { (it as? JsonObject)?.containsKey("auth") == true }
+
     fun encode(servers: List<ServerConfig>): String =
         JsonArray(servers.map { json.encodeToJsonElement(it) }).toString()
 

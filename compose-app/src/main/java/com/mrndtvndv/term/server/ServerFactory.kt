@@ -5,12 +5,13 @@ import android.os.Build
 import com.mrndtvndv.term.data.ssh.native.NativeSshSession
 import com.mrndtvndv.term.data.ssh.native.NativeSshShellChannel
 import com.mrndtvndv.term.domain.ServerConfig
-import com.mrndtvndv.term.domain.toDomainAuth
+import com.mrndtvndv.term.data.ssh.DeviceSshKey
 import com.mrndtvndv.term.herdr.FocusBridgeArtifact
 import com.mrndtvndv.term.herdr.FocusBridgeClient
 import com.mrndtvndv.term.herdr.FocusBridgeInstaller
 import com.mrndtvndv.term.herdr.FocusBridgePaths
 import com.mrndtvndv.term.herdr.HerdrControlClient
+import com.mrndtvndv.term.herdr.HerdrShortcutPublisher
 import com.mrndtvndv.term.workspace.Tab
 import com.mrndtvndv.term.workspace.herdrAttachCommand
 import com.mrndtvndv.term.workspace.herdrControlSocketPath
@@ -23,6 +24,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -45,12 +48,19 @@ class ServerFactory(
             return Server(config = config, homeDir = context.filesDir.absolutePath)
         }
 
-        // 1. Open TCP socket and init native SSH
+        // 1. Open TCP socket and init native SSH, authenticating with the phone's key and a fingerprint
+        check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) { "SSH needs Android 9 or later" }
+        val key = DeviceSshKey(context)
+        check(key.exists) { "This phone has no SSH key yet: make one in the server settings" }
         val session = NativeSshSession()
 
         withContext(Dispatchers.IO) {
             session.connect(config.toSshConfig())
-            session.authenticate(config.toDomainAuth())
+            try {
+                session.authenticate(key.publicKeyBlob(), key::sign, config.hostKeySha256)
+            } catch (e: java.io.IOException) {
+                throw key.signFailure?.let { java.io.IOException(it, e) } ?: e
+            }
         }
 
         // 2. Open SFTP client
@@ -101,6 +111,11 @@ class ServerFactory(
         )
         server.onDisconnect { herdrScope.cancel() }
         if (herdr != null) herdrScope.launch { runCatching { herdr.start() } }
+        // A launcher shortcut per Herdr pane, kept while connected; they stay after disconnecting.
+        if (herdr != null) {
+            val shortcuts = HerdrShortcutPublisher(context, config.id, herdrControlSocketPath(config.herdrSocketPath, homeDir))
+            herdrScope.launch { herdr.state.mapNotNull { it.snapshot }.distinctUntilChanged().collect(shortcuts::publish) }
+        }
         if (focusBridge?.enabled == true) herdrScope.launch { focusBridge.warmUp() }
         return server
     }

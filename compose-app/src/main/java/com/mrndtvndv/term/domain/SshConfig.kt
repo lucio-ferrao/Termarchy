@@ -7,40 +7,14 @@ data class SshConfig(
     val connectionTimeoutMs: Int = 10000
 )
 
-sealed interface SshAuth {
-    data class Password(val password: CharArray) : SshAuth {
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            if (javaClass != other?.javaClass) return false
-            other as Password
-            return password.contentEquals(other.password)
-        }
+/** The SHA-256 of an SSH host key as OpenSSH shows it: "SHA256:" and unpadded base64. */
+fun hostKeyFingerprint(sha256: ByteArray): String =
+    "SHA256:" + android.util.Base64.encodeToString(sha256, android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
 
-        override fun hashCode(): Int {
-            return password.contentHashCode()
-        }
-    }
-
-    data class PublicKey(
-        val privateKeyPem: String,
-        val passphrase: CharArray? = null
-    ) : SshAuth {
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            if (javaClass != other?.javaClass) return false
-            other as PublicKey
-            if (privateKeyPem != other.privateKeyPem) return false
-            if (passphrase != null) {
-                if (other.passphrase == null) return false
-                if (!passphrase.contentEquals(other.passphrase)) return false
-            } else if (other.passphrase != null) return false
-            return true
-        }
-
-        override fun hashCode(): Int {
-            var result = privateKeyPem.hashCode()
-            result = 31 * result + (passphrase?.contentHashCode() ?: 0)
-            return result
-        }
-    }
-}
+/**
+ * The server's host key is not the one saved for it: [expected] is null the first time, when no key is saved yet,
+ * and differs from [seen] when the key changed. Nothing was sent to the server for authentication.
+ */
+class HostKeyException(val seen: String, val expected: String?) : java.io.IOException(
+    if (expected == null) "Unknown server host key $seen" else "The server host key changed: $seen instead of $expected",
+)

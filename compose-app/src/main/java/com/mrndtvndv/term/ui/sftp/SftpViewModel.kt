@@ -11,6 +11,7 @@ import com.mrndtvndv.term.workspace.SftpBrowserKey
 import com.mrndtvndv.term.workspace.SftpBrowserState
 import com.mrndtvndv.term.workspace.SftpBrowserStore
 import com.mrndtvndv.term.workspace.SftpScroll
+import com.mrndtvndv.term.workspace.shellQuote
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -272,7 +273,7 @@ class SftpViewModel(
     @Suppress("TooGenericExceptionCaught", "SwallowedException")
     private suspend fun gitStatuses(path: String): Map<String, String> =
         try {
-            parseGitStatuses(execCommand("git -C \"$path\" status --porcelain --ignored=no ."))
+            parseGitStatuses(execCommand("git -C ${shellQuote(path)} status --porcelain --ignored=no ."))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

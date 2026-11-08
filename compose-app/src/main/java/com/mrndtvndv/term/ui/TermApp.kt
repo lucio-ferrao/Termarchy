@@ -42,6 +42,7 @@ import com.mrndtvndv.term.server.TerminalEntry
 import com.mrndtvndv.term.ui.addserver.AddServerScreen
 import com.mrndtvndv.term.ui.addserver.FocusBridgeControls
 import com.mrndtvndv.term.ui.notification.InAppNotificationBanner
+import com.mrndtvndv.term.ui.serverlist.HostKeyDialog
 import com.mrndtvndv.term.ui.serverlist.ServerListScreen
 import com.mrndtvndv.term.ui.settings.KeyBarEditorRoute
 import com.mrndtvndv.term.ui.settings.KeyBarItemEditorRoute
@@ -190,6 +191,13 @@ fun TermApp(
                                         appViewModel.updateLocalConfig(cmd, enabled, dir, autoCleanup, maxFiles)
                                     },
                                 )
+                                serverListState.hostKeyPrompt?.let { prompt ->
+                                    HostKeyDialog(
+                                        prompt = prompt,
+                                        onTrust = appViewModel::trustHostKey,
+                                        onDismiss = appViewModel::dismissHostKeyPrompt,
+                                    )
+                                }
                             }
 
                             entry<AppRoute.AddServer> {

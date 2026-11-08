@@ -131,7 +131,7 @@ class ReviewViewModel(
 
     private suspend fun fetchCommits(repoRoot: String, limit: Int = 15, skip: Int = 0): List<GitCommit> {
         return try {
-            val command = "export PATH=\$PATH:/opt/homebrew/bin:/usr/local/bin; cd \"$repoRoot\" && " +
+            val command = "export PATH=\$PATH:/opt/homebrew/bin:/usr/local/bin; cd ${shellQuote(repoRoot)} && " +
                 "git log --topo-order --skip=$skip -n $limit " +
                 "--pretty=format:\"%H%x1f%h%x1f%an%x1f%ar%x1f%P%x1f%D%x1f%s\""
             val output = execCommand(command)
@@ -258,7 +258,7 @@ class ReviewViewModel(
             try {
                 val repoRoot = getRepoRoot(execCommand, dir)
                 val command = "export PATH=\$PATH:/opt/homebrew/bin:/usr/local/bin; " +
-                    "cd \"$repoRoot\" && git status --porcelain"
+                    "cd ${shellQuote(repoRoot)} && git status --porcelain"
                 val output = execCommand(command)
                 val (staged, unstaged) = parseStatusOutput(output)
 
@@ -404,9 +404,9 @@ class ReviewViewModel(
             val dir = workspaceDir.value
             try {
                 val repoRoot = getRepoRoot(execCommand, dir)
-                val pathsArg = files.joinToString(" ") { "\"${it.path}\"" }
+                val pathsArg = files.joinToString(" ") { shellQuote(it.path) }
                 val command = "export PATH=\$PATH:/opt/homebrew/bin:/usr/local/bin; " +
-                    "cd \"$repoRoot\" && git add -- $pathsArg"
+                    "cd ${shellQuote(repoRoot)} && git add -- $pathsArg"
                 execCommand(command)
                 refresh()
             } catch (e: Exception) {
@@ -421,9 +421,9 @@ class ReviewViewModel(
             val dir = workspaceDir.value
             try {
                 val repoRoot = getRepoRoot(execCommand, dir)
-                val pathsArg = files.joinToString(" ") { "\"${it.path}\"" }
+                val pathsArg = files.joinToString(" ") { shellQuote(it.path) }
                 val command = "export PATH=\$PATH:/opt/homebrew/bin:/usr/local/bin; " +
-                    "cd \"$repoRoot\" && (git restore --staged -- $pathsArg || git reset HEAD -- $pathsArg)"
+                    "cd ${shellQuote(repoRoot)} && (git restore --staged -- $pathsArg || git reset HEAD -- $pathsArg)"
                 execCommand(command)
                 refresh()
             } catch (e: Exception) {
@@ -444,22 +444,22 @@ class ReviewViewModel(
 
                 val commands = mutableListOf<String>()
                 if (untracked.isNotEmpty()) {
-                    val pathsArg = untracked.joinToString(" ") { "\"${it.path}\"" }
+                    val pathsArg = untracked.joinToString(" ") { shellQuote(it.path) }
                     commands.add("rm -rf $pathsArg")
                 }
                 if (staged.isNotEmpty()) {
-                    val pathsArg = staged.joinToString(" ") { "\"${it.path}\"" }
+                    val pathsArg = staged.joinToString(" ") { shellQuote(it.path) }
                     commands.add("(git restore --staged -- $pathsArg || git reset HEAD -- $pathsArg) && " +
                         "(git restore -- $pathsArg || git checkout -- $pathsArg)")
                 }
                 if (unstaged.isNotEmpty()) {
-                    val pathsArg = unstaged.joinToString(" ") { "\"${it.path}\"" }
+                    val pathsArg = unstaged.joinToString(" ") { shellQuote(it.path) }
                     commands.add("(git restore -- $pathsArg || git checkout -- $pathsArg)")
                 }
 
                 if (commands.isNotEmpty()) {
                     val fullCommand = "export PATH=\$PATH:/opt/homebrew/bin:/usr/local/bin; " +
-                        "cd \"$repoRoot\" && " + commands.joinToString(" && ")
+                        "cd ${shellQuote(repoRoot)} && " + commands.joinToString(" && ")
                     execCommand(fullCommand)
                 }
                 refresh()
@@ -538,8 +538,11 @@ class ReviewViewModel(
                         "git commit --amend -m $escapedSubject"
                 } else {
                     pathEnv + "cd ${shellQuote(repoRoot)} && " +
-                        "git rebase -x \"if [ \\\$(git rev-parse HEAD) = '${commit.hash}' ]; " +
-                        "then git commit --amend -m $escapedSubject; fi\" \"${commit.hash}^\""
+                        // The -x command is quoted as a whole, so the subject inside it is not expanded by this shell.
+                        "git rebase -x " + shellQuote(
+                            "if [ \$(git rev-parse HEAD) = '${commit.hash}' ]; " +
+                                "then git commit --amend -m $escapedSubject; fi",
+                        ) + " " + shellQuote("${commit.hash}^")
                 }
                 execCommand(command)
                 refresh()

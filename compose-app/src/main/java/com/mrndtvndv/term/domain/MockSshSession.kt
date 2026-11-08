@@ -24,7 +24,7 @@ class MockSshSession : SshSession {
         _isConnected.value = true
     }
 
-    override suspend fun authenticate(auth: SshAuth) {
+    override suspend fun authenticate(publicKey: ByteArray, sign: (ByteArray) -> ByteArray?, hostKeySha256: String?) {
         _isConnected.value = true
     }
 
