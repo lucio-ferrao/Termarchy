@@ -10,8 +10,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.mrndtvndv.term.TabType
+import com.mrndtvndv.term.herdr.paneTitle
 import com.mrndtvndv.term.server.TerminalEntry
 import com.mrndtvndv.term.workspace.Tab
 import java.io.File
@@ -64,10 +66,16 @@ internal fun Tab.icon(): ImageVector = when (this) {
     is Tab.Viewer -> Icons.AutoMirrored.Filled.Article
 }
 
-/** Label for a tab chip. Terminals fall back to the shell's title, then "Terminal". */
-fun tabLabel(tab: Tab, terminals: Map<String, TerminalEntry>): String = when (tab) {
+/** True when only one remote server is saved: the "user@host:" of shell titles then only repeats it (see [paneTitle]). */
+val LocalSingleRemoteServer = staticCompositionLocalOf { false }
+
+/**
+ * Label for a tab chip. Terminals fall back to the shell's title (without "user@host:" with [singleServer]), then
+ * "Terminal".
+ */
+fun tabLabel(tab: Tab, terminals: Map<String, TerminalEntry>, singleServer: Boolean): String = when (tab) {
     is Tab.Terminal -> tab.name
-        ?: terminals[tab.id]?.session?.title?.takeIf { it.isNotBlank() }
+        ?: terminals[tab.id]?.session?.title?.takeIf { it.isNotBlank() }?.let { paneTitle(it, singleServer) }
         ?: "Terminal"
     is Tab.Sftp -> lastPathSegment(tab.dir)
     is Tab.Git -> "Git · " + lastPathSegment(tab.repoDir)

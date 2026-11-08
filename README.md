@@ -10,7 +10,7 @@ An experimental Android terminal app using libghostty-vt as the terminal backend
 
 - **Ghostty integration** — Uses Ghostty-backed VT parsing and terminal state management inside the app.
 - **Workspaces and tabs** — Each workspace has a root folder and its own tabs: terminals, a file browser, and a Markdown / HTML / text viewer. The tabs grid shows a live preview of every terminal and switches or manages workspaces. Workspaces and tabs are restored after the app is killed, with each shell restarted in its last directory.
-- **Floating key bar** — Esc, Ctrl, Alt (tap to arm, tap again to lock), an arrow joystick and Tab float above the keyboard, next to the button that opens the tabs grid.
+- **Floating key bar** — Esc, Ctrl, Alt (tap to arm, tap again to lock) and Tab float above the keyboard, next to the button that opens the tabs grid.
 - **Clickable terminal links** — `terminal-onclick-url-open = true` enables tap-to-open links; `terminal-onclick-url-open-when-mouse-tracking-active = true` prefers link taps over terminal mouse tracking.
 - **Remember soft keyboard state** — `remember-soft-keyboard-state = true` restores the last soft keyboard visibility when reopening the app.
 - **Material You theming** — `material-you-theme = "disabled" | "light" | "dark" | "black" | "system"` themes the app chrome and terminal ANSI palette with wallpaper-derived Material 3 colors on Android 12+. `black` uses dynamic accents on pure black. When enabled, `colors.properties` is ignored. Recreates automatically on wallpaper changes.

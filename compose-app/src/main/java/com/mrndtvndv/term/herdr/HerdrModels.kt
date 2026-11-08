@@ -130,6 +130,15 @@ data class HerdrPane(
     val revision: Long,
     /** [terminalTitle] without the agent's status glyph, e.g. the title of a Claude conversation. */
     val terminalTitleStripped: String? = null,
+    /**
+     * The program in the pane reads a password (herdr's `input_mode`: echo off with line input on), so the
+     * keyboard must not suggest or learn. False when the server does not report it.
+     */
+    val passwordInput: Boolean = false,
+    /** The program in the foreground of the pane (herdr's `foreground_process`, e.g. vim or the shell); null if not reported. */
+    val foregroundProcess: String? = null,
+    /** The program shows the alternate screen (herdr's `screen`), as full-screen programs do; false if not reported. */
+    val alternateScreen: Boolean = false,
 )
 
 data class HerdrAgent(

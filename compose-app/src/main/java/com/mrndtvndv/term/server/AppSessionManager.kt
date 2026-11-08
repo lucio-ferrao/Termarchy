@@ -59,6 +59,9 @@ class AppSessionManager private constructor(context: Context) : AppSessionManage
             context = appContext,
             onSessionClientCreated = { createDefaultSessionClient() },
             onServiceBind = { session, serverId -> bindTerminalSession(session, serverId) },
+            singleServer = {
+                (serverRepository.load() as? SavedServersLoad.Loaded)?.servers?.count { !it.isLocal } == 1
+            },
         )
     }
     private val serverManager: ServerManager by lazy {

@@ -29,6 +29,15 @@ fun LazyListScope.terminalSettings(state: SettingsState) {
         SettingsGroup(
             rows = listOfNotNull(
                 { shapes ->
+                    SwitchRow(
+                        title = "Local terminal",
+                        checked = state.settings.localTerminal,
+                        onChange = { checked -> state.onUpdate { it.copy(localTerminal = checked) } },
+                        shapes = shapes,
+                        summary = "Show a shell on this device",
+                    )
+                },
+                { shapes ->
                     NumberRow(
                         title = "Font size",
                         value = state.settings.fontSize,

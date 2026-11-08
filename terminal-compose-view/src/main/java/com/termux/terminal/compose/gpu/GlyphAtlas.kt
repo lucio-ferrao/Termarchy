@@ -5,8 +5,10 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.Typeface
+import android.graphics.text.TextRunShaper
 import android.opengl.GLES30
 import android.opengl.GLUtils
+import android.os.Build
 import kotlin.math.ceil
 import java.util.HashMap
 
@@ -61,10 +63,16 @@ data class GlyphAtlasKey(
     val italic: Boolean,
     val underline: Boolean,
     val strikeThrough: Boolean,
-    val rasterMode: Int = RASTER_MODE_RGBA
+    val rasterMode: Int = RASTER_MODE_RGBA,
+    /** The glyph [text] takes in [context], or [NO_GLYPH] for a cell drawn on its own. */
+    val glyphId: Int = NO_GLYPH,
+    /** The run [text] was shaped in, starting at [contextOffset]; the atlas shares one entry per [glyphId], whatever the run. */
+    val context: String? = null,
+    val contextOffset: Int = 0
 ) {
     init {
         require(text.isNotEmpty()) { "GlyphAtlasKey text must not be empty" }
+        require(context == null || context.startsWith(text, contextOffset)) { "context must contain text at contextOffset" }
         require(cellSpan >= 1) { "cellSpan must be positive" }
         require(fontSizePx > 0f) { "fontSizePx must be positive" }
         require(cellWidthPx > 0f) { "cellWidthPx must be positive" }
@@ -78,6 +86,7 @@ data class GlyphAtlasKey(
     companion object {
         const val RASTER_MODE_RGBA = 0
         const val RASTER_MODE_MASK = 1
+        const val NO_GLYPH = -1
     }
 }
 
@@ -96,6 +105,7 @@ private data class GlyphAtlasLookupKey(
     val underline: Boolean,
     val strikeThrough: Boolean,
     val rasterMode: Int,
+    val glyphId: Int,
     val foregroundArgb: Int?
 )
 
@@ -113,6 +123,7 @@ private fun GlyphAtlasKey.lookupKey(): GlyphAtlasLookupKey = GlyphAtlasLookupKey
     underline = underline,
     strikeThrough = strikeThrough,
     rasterMode = rasterMode,
+    glyphId = glyphId,
     foregroundArgb = foregroundArgb.takeIf { rasterMode == GlyphAtlasKey.RASTER_MODE_RGBA }
 )
 
@@ -350,6 +361,31 @@ internal fun glyphRasterGeometry(
     )
 }
 
+/** How many cells a contextual glyph may reach past its own, each side: Paper Mono's `<!--` reaches back three. */
+private const val ContextualReachCells = 4
+
+/**
+ * Bounds of the painted pixels in a [width] x [height] bitmap, relative to the pen at ([originX], [baselineY]); empty
+ * when nothing was painted.
+ */
+internal fun inkBounds(pixels: IntArray, width: Int, height: Int, originX: Int, baselineY: Int): GlyphPaintBounds {
+    var left = width
+    var top = height
+    var right = 0
+    var bottom = 0
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            if (pixels[y * width + x] ushr 24 == 0) continue
+            if (x < left) left = x
+            if (x >= right) right = x + 1
+            if (y < top) top = y
+            bottom = y + 1
+        }
+    }
+    if (right <= left) return GlyphPaintBounds(0, 0, 0, 0)
+    return GlyphPaintBounds(left - originX, top - baselineY, right - originX, bottom - baselineY)
+}
+
 internal data class RasterizedGlyph(
     val bitmap: Bitmap,
     val drawOffsetX: Float,
@@ -366,12 +402,12 @@ internal class AndroidGlyphRasterizer {
     fun rasterize(key: GlyphAtlasKey, limits: GlyphAtlasLimits): RasterizedGlyph? {
         paint.reset()
         paint.flags = Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG
-        paint.typeface = key.typeface ?: Typeface.MONOSPACE
+        paint.typeface = cellTypeface(key.typeface, key.bold)
+        paint.fontFeatureSettings = TerminalFontFeatures
         paint.textSize = key.fontSizePx
         val maskRequested = key.rasterMode == GlyphAtlasKey.RASTER_MODE_MASK
         paint.color = if (maskRequested) 0xFFFFFFFF.toInt() else key.foregroundArgb
         paint.textScaleX = key.textScaleX
-        paint.isFakeBoldText = key.bold
         paint.textSkewX = if (key.italic) GlesItalicTextSkewX else 0f
         paint.isUnderlineText = key.underline
         paint.isStrikeThruText = key.strikeThrough
@@ -382,15 +418,13 @@ internal class AndroidGlyphRasterizer {
         if (measuredWidth > availableWidth) {
             paint.textScaleX *= availableWidth / measuredWidth
         }
-        val paintedBounds = Rect()
-        paint.getTextBounds(key.text, 0, key.text.length, paintedBounds)
+        val contextualGlyph = contextualGlyph(key)
+        val chars = key.text.toCharArray()
+        val draw: (Canvas, Float, Float) -> Unit = contextualGlyph ?: { canvas, x, baseline ->
+            canvas.drawTextRun(chars, 0, chars.size, 0, chars.size, x, baseline, false, paint)
+        }
         val geometry = glyphRasterGeometry(
-            bounds = GlyphPaintBounds(
-                left = paintedBounds.left,
-                top = paintedBounds.top,
-                right = paintedBounds.right,
-                bottom = paintedBounds.bottom
-            ),
+            bounds = if (contextualGlyph == null) textBounds(key.text) else drawnBounds(draw, key),
             measuredWidth = paint.measureText(key.text),
             cellHeightPx = key.cellHeightPx,
             fontAscentPx = key.fontAscentPx,
@@ -401,19 +435,7 @@ internal class AndroidGlyphRasterizer {
         }
 
         val bitmap = Bitmap.createBitmap(geometry.width, geometry.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val chars = key.text.toCharArray()
-        canvas.drawTextRun(
-            chars,
-            0,
-            chars.size,
-            0,
-            chars.size,
-            geometry.drawOriginX,
-            geometry.drawBaselineY,
-            false,
-            paint
-        )
+        draw(Canvas(bitmap), geometry.drawOriginX, geometry.drawBaselineY)
         val rasterMode = if (maskRequested && bitmapContainsColor(bitmap)) {
             GlyphAtlasKey.RASTER_MODE_RGBA
         } else {
@@ -425,6 +447,50 @@ internal class AndroidGlyphRasterizer {
             drawOffsetY = geometry.drawOffsetY,
             rasterMode = rasterMode
         )
+    }
+
+    private fun textBounds(text: String): GlyphPaintBounds {
+        val bounds = Rect()
+        paint.getTextBounds(text, 0, text.length, bounds)
+        return GlyphPaintBounds(bounds.left, bounds.top, bounds.right, bounds.bottom)
+    }
+
+    /**
+     * Draws the glyph [key] takes in its run. Android shapes a range of text without its neighbours, even when given
+     * them as context, so the run is shaped whole and the cell's glyph drawn by id; underline and strikethrough cells
+     * never join a run, since glyphs are drawn without them.
+     */
+    private fun contextualGlyph(key: GlyphAtlasKey): ((Canvas, Float, Float) -> Unit)? {
+        val context = key.context ?: return null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+        val chars = context.toCharArray()
+        val glyphs = TextRunShaper.shapeTextRun(chars, 0, chars.size, 0, chars.size, 0f, 0f, false, paint)
+        if (glyphs.glyphCount() != chars.size) return null
+        val glyphId = intArrayOf(glyphs.getGlyphId(key.contextOffset))
+        val font = glyphs.getFont(key.contextOffset)
+        return { canvas, x, baseline -> canvas.drawGlyphs(glyphId, 0, floatArrayOf(x, baseline), 0, 1, font, paint) }
+    }
+
+    /**
+     * Paint measures only text, not a glyph drawn by id, so the glyph is drawn on a scratch bitmap and measured from
+     * the pixels. A ligature drawn on the run's last cell reaches back over the cells before it.
+     */
+    private fun drawnBounds(draw: (Canvas, Float, Float) -> Unit, key: GlyphAtlasKey): GlyphPaintBounds {
+        val reach = ceil(key.cellWidthPx * ContextualReachCells).toInt()
+        val metrics = paint.fontMetricsInt
+        val baseline = 1 - metrics.top
+        val width = reach * 2 + ceil(key.cellWidthPx * key.cellSpan).toInt()
+        val height = baseline + metrics.bottom + 1
+        val scratch = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        try {
+            draw(Canvas(scratch), reach.toFloat(), baseline.toFloat())
+            val pixelCount = width * height
+            if (pixelScratch.size < pixelCount) pixelScratch = IntArray(pixelCount)
+            scratch.getPixels(pixelScratch, 0, width, 0, 0, width, height)
+            return inkBounds(pixelScratch, width, height, originX = reach, baselineY = baseline)
+        } finally {
+            scratch.recycle()
+        }
     }
 
     private fun bitmapContainsColor(bitmap: Bitmap): Boolean {

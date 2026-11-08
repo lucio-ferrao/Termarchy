@@ -165,6 +165,14 @@ fun TerminalCanvas(
         }
         activeImeController.consumeRequest(request.sequence)
     }
+    val privateInput = activeImeController.privateInput
+    LaunchedEffect(imeHost, privateInput) {
+        imeHost.setPrivateInput(privateInput)
+    }
+    val privateImeOptions = activeImeController.privateImeOptions
+    LaunchedEffect(imeHost, privateImeOptions) {
+        imeHost.setPrivateImeOptions(privateImeOptions)
+    }
     LaunchedEffect(config.selectionResetKey) {
         selectionState.clear()
     }

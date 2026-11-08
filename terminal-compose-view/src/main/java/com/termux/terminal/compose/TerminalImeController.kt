@@ -42,6 +42,18 @@ class TerminalImeController {
     private var requestState by mutableStateOf<TerminalImeRequest?>(null)
     private var visibilityState by mutableStateOf(TerminalImeVisibility.UNKNOWN)
 
+    /**
+     * The terminal is reading private input, such as a password: the input session is restarted as a password
+     * field without personalized learning, so the keyboard neither suggests nor remembers what is typed.
+     */
+    var privateInput: Boolean by mutableStateOf(false)
+
+    /**
+     * App-specific options for the keyboard (`EditorInfo.privateImeOptions`), e.g. what program the terminal runs so
+     * the keyboard can adapt its suggestions. The input session is restarted when they change.
+     */
+    var privateImeOptions: String? by mutableStateOf(null)
+
     /** The latest visibility reported by the platform window insets. */
     val visibility: TerminalImeVisibility
         get() = visibilityState

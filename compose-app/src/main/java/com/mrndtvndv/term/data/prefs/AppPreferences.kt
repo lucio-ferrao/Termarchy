@@ -1,7 +1,6 @@
 package com.mrndtvndv.term.data.prefs
 
 import android.content.SharedPreferences
-import com.mrndtvndv.term.ui.keyboard.SoftKeyboardState
 import com.mrndtvndv.term.ui.workspace.CursorTrailEffect
 import com.mrndtvndv.term.ui.workspace.DefaultKeyboardResizeDebounceMillis
 import com.mrndtvndv.term.ui.workspace.MaxKeyboardResizeDebounceMillis
@@ -26,11 +25,10 @@ private object Key {
     const val NativeLogcatLoggingEnabled = "native_logcat_logging_enabled"
     const val DebugHudEnabled = "debug_hud_enabled"
     const val AnimationsEnabled = "animations_enabled"
-    const val RememberSoftKeyboardState = "remember_soft_keyboard_state"
-    const val LastSoftKeyboardState = "last_soft_keyboard_state"
     const val ArrowJoystickMode = "arrow_joystick_mode"
     const val OverlayKeyBar = "overlay_key_bar"
     const val AgentsSidebar = "agents_sidebar"
+    const val LocalTerminal = "local_terminal"
     const val OverlayAgentsFab = "overlay_agents_fab"
     const val KeyBarLayout = "key_bar_layout"
     const val WallpaperUri = "terminal_wallpaper_uri"
@@ -78,15 +76,10 @@ private fun SharedPreferences.Editor.write(settings: AppSettings) {
     putBoolean(Key.NativeLogcatLoggingEnabled, settings.nativeLogcatLoggingEnabled)
     putBoolean(Key.DebugHudEnabled, settings.debugHudEnabled)
     putBoolean(Key.AnimationsEnabled, settings.animationsEnabled)
-    putBoolean(Key.RememberSoftKeyboardState, settings.rememberSoftKeyboardState)
-    if (settings.lastSoftKeyboardState == SoftKeyboardState.UNKNOWN) {
-        remove(Key.LastSoftKeyboardState)
-    } else {
-        putString(Key.LastSoftKeyboardState, settings.lastSoftKeyboardState.preferenceValue)
-    }
     putString(Key.ArrowJoystickMode, settings.arrowJoystickMode.name)
     putBoolean(Key.OverlayKeyBar, settings.overlayKeyBar)
     putBoolean(Key.AgentsSidebar, settings.agentsSidebar)
+    putBoolean(Key.LocalTerminal, settings.localTerminal)
     putBoolean(Key.OverlayAgentsFab, settings.overlayAgentsFab)
     writeKeyBarLayout(settings.keyBarLayout)
     putString(Key.WallpaperUri, settings.wallpaperUri)
@@ -139,13 +132,12 @@ class AppPreferences(
             nativeLogcatLoggingEnabled = prefs.getBoolean(Key.NativeLogcatLoggingEnabled, false),
             debugHudEnabled = prefs.getBoolean(Key.DebugHudEnabled, false),
             animationsEnabled = prefs.getBoolean(Key.AnimationsEnabled, true),
-            rememberSoftKeyboardState = prefs.getBoolean(Key.RememberSoftKeyboardState, false),
-            lastSoftKeyboardState = SoftKeyboardState.fromPreference(prefs.getString(Key.LastSoftKeyboardState, null)),
             arrowJoystickMode = ArrowJoystickMode.entries.firstOrNull {
                 it.name == prefs.getString(Key.ArrowJoystickMode, null)
             } ?: ArrowJoystickMode.Swipe,
             overlayKeyBar = prefs.getBoolean(Key.OverlayKeyBar, false),
             agentsSidebar = prefs.getBoolean(Key.AgentsSidebar, true),
+            localTerminal = prefs.getBoolean(Key.LocalTerminal, false),
             overlayAgentsFab = prefs.getBoolean(Key.OverlayAgentsFab, false),
             keyBarLayout = loadKeyBarLayout(prefs),
             wallpaperUri = prefs.getString(Key.WallpaperUri, null),
@@ -160,8 +152,6 @@ class AppPreferences(
     private fun normalize(settings: AppSettings): AppSettings = settings.copy(
         fontSize = settings.fontSize.coerceIn(fontSizeRange),
         keyboardResizeDebounceMs = settings.keyboardResizeDebounceMs.coerceIn(0, MaxKeyboardResizeDebounceMillis),
-        lastSoftKeyboardState = settings.lastSoftKeyboardState.takeIf { settings.rememberSoftKeyboardState }
-            ?: SoftKeyboardState.UNKNOWN,
         wallpaperOpacity = settings.wallpaperOpacity.coerceIn(0f, 1f),
         keyBarLayout = settings.keyBarLayout.normalized(),
     )

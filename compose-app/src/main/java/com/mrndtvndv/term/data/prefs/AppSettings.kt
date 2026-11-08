@@ -1,6 +1,5 @@
 package com.mrndtvndv.term.data.prefs
 
-import com.mrndtvndv.term.ui.keyboard.SoftKeyboardState
 import com.mrndtvndv.term.ui.workspace.CursorTrailEffect
 import com.mrndtvndv.term.ui.workspace.VisualEffectFrameRate
 import com.termux.terminal.compose.WallpaperScaling
@@ -23,11 +22,11 @@ data class AppSettings(
     val nativeLogcatLoggingEnabled: Boolean,
     val debugHudEnabled: Boolean,
     val animationsEnabled: Boolean,
-    val rememberSoftKeyboardState: Boolean,
-    val lastSoftKeyboardState: SoftKeyboardState,
     val arrowJoystickMode: ArrowJoystickMode,
     val overlayKeyBar: Boolean,
     val agentsSidebar: Boolean,
+    /** Offer a shell on this device (the local terminal) next to the servers. */
+    val localTerminal: Boolean,
     val overlayAgentsFab: Boolean,
     val keyBarLayout: KeyBarLayout,
     val wallpaperUri: String?,

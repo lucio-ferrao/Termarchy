@@ -40,6 +40,36 @@ class GlyphAtlasTest {
     }
 
     @Test
+    fun contextualGlyphsShareOneEntryPerGlyphWhateverTheirRun() {
+        val allocator = GlyphAtlasAllocator(GlyphAtlasLimits(pageSizePx = 64, maxPages = 1))
+        val arrow = atlasKey(">").copy(glyphId = 7, context = "->", contextOffset = 1)
+        val longerArrow = atlasKey(">").copy(glyphId = 7, context = "-->", contextOffset = 2)
+        val plain = atlasKey(">").copy(glyphId = 3, context = ">a", contextOffset = 0)
+
+        val region = allocator.allocateNew(arrow, 8, 8)!!.region
+
+        assertEquals(region, allocator.find(longerArrow))
+        assertNull(allocator.find(plain))
+        assertNull(allocator.find(atlasKey(">")))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun contextMustHoldTheTextAtItsOffset() {
+        atlasKey(">").copy(glyphId = 7, context = "->", contextOffset = 0)
+    }
+
+    @Test
+    fun inkBoundsAreRelativeToThePenAndEmptyWithoutInk() {
+        val width = 6
+        val pixels = IntArray(width * 4)
+        pixels[1 * width + 1] = 0x40FFFFFF
+        pixels[2 * width + 4] = 0xFFFFFFFF.toInt()
+
+        assertEquals(GlyphPaintBounds(-2, -2, 2, 0), inkBounds(pixels, width, 4, originX = 3, baselineY = 3))
+        assertEquals(GlyphPaintBounds(0, 0, 0, 0), inkBounds(IntArray(width * 4), width, 4, originX = 3, baselineY = 3))
+    }
+
+    @Test
     fun allocatorStaysWithinPagesAndResetsWithAStaleGeneration() {
         val limits = GlyphAtlasLimits(
             pageSizePx = 32,

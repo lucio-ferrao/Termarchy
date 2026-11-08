@@ -31,6 +31,7 @@ class HerdrShortcutsTest {
             "srv",
             pane("t1", agent = "claude", status = HerdrAgentStatus.Working,
                 title = "✳ Sistema de backups", stripped = "Sistema de backups"),
+            singleServer = false,
         )
 
         assertEquals("herdr:srv:t1", shortcut.id)
@@ -41,21 +42,34 @@ class HerdrShortcutsTest {
     }
 
     @Test
+    fun withOneServerAShellTitleDropsItsUserAndHost() {
+        assertEquals("~/lira", paneTitle("lef@Corsair:~/lira", singleServer = true))
+        assertEquals("lef@Corsair:~/lira", paneTitle("lef@Corsair:~/lira", singleServer = false))
+        assertEquals("lef@Corsair:", paneTitle("lef@Corsair:", singleServer = true))
+        assertEquals("Sistema de backups", paneTitle("Sistema de backups", singleServer = true))
+        assertEquals(
+            "~/lira",
+            herdrPaneShortcut("srv", pane("t1", title = "lef@Corsair:~/lira", stripped = "lef@Corsair:~/lira"), singleServer = true)
+                .shortLabel,
+        )
+    }
+
+    @Test
     fun untitledPaneFallsBackToAgentAndFolder() {
-        assertEquals("codex project", herdrPaneShortcut("srv", pane("t1", agent = "codex")).shortLabel)
-        assertEquals("project", herdrPaneShortcut("srv", pane("t1")).shortLabel)
-        assertEquals("t1", herdrPaneShortcut("srv", pane("t1", cwd = null)).shortLabel)
+        assertEquals("codex project", herdrPaneShortcut("srv", pane("t1", agent = "codex"), singleServer = false).shortLabel)
+        assertEquals("project", herdrPaneShortcut("srv", pane("t1"), singleServer = false).shortLabel)
+        assertEquals("t1", herdrPaneShortcut("srv", pane("t1", cwd = null), singleServer = false).shortLabel)
     }
 
     @Test
     fun paneWithoutAgentHasNoStatus() {
-        assertNull(herdrPaneShortcut("srv", pane("t1", status = HerdrAgentStatus.Idle)).status)
-        assertNull(herdrPaneShortcut("srv", pane("t1", agent = "claude")).status)
+        assertNull(herdrPaneShortcut("srv", pane("t1", status = HerdrAgentStatus.Idle), singleServer = false).status)
+        assertNull(herdrPaneShortcut("srv", pane("t1", agent = "claude"), singleServer = false).status)
     }
 
     @Test
     fun choiceKeepsMostRecentWithinBudget() {
-        val shortcuts = listOf("a", "b", "c").map { herdrPaneShortcut("srv", pane(it)) }
+        val shortcuts = listOf("a", "b", "c").map { herdrPaneShortcut("srv", pane(it), singleServer = false) }
         val chosen = chooseHerdrShortcuts(shortcuts, mapOf("a" to 1L, "b" to 3L, "c" to 2L), budget = 2)
 
         assertEquals(listOf("b", "c"), chosen.map { it.terminalId })
@@ -64,9 +78,9 @@ class HerdrShortcutsTest {
     @Test
     fun equalTimesPutActiveAgentsFirst() {
         val shortcuts = listOf(
-            herdrPaneShortcut("srv", pane("plain")),
-            herdrPaneShortcut("srv", pane("idle", agent = "claude", status = HerdrAgentStatus.Idle)),
-            herdrPaneShortcut("srv", pane("done", agent = "claude", status = HerdrAgentStatus.Done)),
+            herdrPaneShortcut("srv", pane("plain"), singleServer = false),
+            herdrPaneShortcut("srv", pane("idle", agent = "claude", status = HerdrAgentStatus.Idle), singleServer = false),
+            herdrPaneShortcut("srv", pane("done", agent = "claude", status = HerdrAgentStatus.Done), singleServer = false),
         )
         val chosen = chooseHerdrShortcuts(shortcuts, shortcuts.associate { it.terminalId to 5L }, budget = 3)
 
@@ -75,7 +89,7 @@ class HerdrShortcutsTest {
 
     @Test
     fun noBudgetChoosesNothing() {
-        val shortcuts = listOf(herdrPaneShortcut("srv", pane("a")))
+        val shortcuts = listOf(herdrPaneShortcut("srv", pane("a"), singleServer = false))
         assertTrue(chooseHerdrShortcuts(shortcuts, emptyMap(), budget = -1).isEmpty())
     }
 }

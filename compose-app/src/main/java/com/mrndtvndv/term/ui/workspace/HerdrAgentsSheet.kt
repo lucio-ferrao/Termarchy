@@ -89,6 +89,7 @@ import androidx.compose.ui.window.PopupProperties
 import com.mrndtvndv.processicons.agentIconResource
 import com.mrndtvndv.term.ServerListUiState
 import com.mrndtvndv.term.domain.ServerConfig
+import com.mrndtvndv.term.herdr.paneTitle
 import com.mrndtvndv.term.herdr.HerdrAgentStatus
 import com.mrndtvndv.term.herdr.HerdrPane
 import com.mrndtvndv.term.herdr.HerdrState
@@ -117,7 +118,8 @@ fun HerdrAgentsSidebar(
     onFocusTab: (HerdrTab) -> Unit,
     onClosePane: suspend (HerdrPane) -> Boolean,
     onSwitchServer: (serverId: String) -> Unit,
-    onSwitchToLocal: () -> Unit,
+    /** Switches to the local terminal; null when it is off in the settings, which hides its row. */
+    onSwitchToLocal: (() -> Unit)?,
     onOpenServerList: () -> Unit,
     onOpenSettings: () -> Unit,
     onDismiss: () -> Unit,
@@ -201,7 +203,7 @@ fun HerdrAgentsSidebar(
                 fadeOut(motion.defaultEffectsSpec()),
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                ServerSwitcherRow(
+                if (onSwitchToLocal != null) ServerSwitcherRow(
                     title = "Local Terminal",
                     subtitle = "On-device shell",
                     icon = Icons.Default.Terminal,
@@ -632,7 +634,7 @@ private fun LazyItemScope.WorkspaceGroupItem(
 ) {
     val motion = MaterialTheme.motionScheme
     val headerBackground = if (!expanded && workspace.id == snapshot.focusedWorkspaceId) {
-        MaterialTheme.colorScheme.primaryContainer
+        MaterialTheme.colorScheme.surfaceContainerHighest
     } else {
         Color.Transparent
     }
@@ -698,6 +700,7 @@ private fun HerdrTabGroup(
 ) {
     // Rows still animating out stay at their last index after the snapshot drops them, so the group never jumps.
     val closing = remember { mutableStateMapOf<String, IndexedValue<HerdrPane>>() }
+    val singleServer = LocalSingleRemoteServer.current
     val panes = snapshot.panesIn(tab.id).toMutableList().apply {
         closing.values.sortedBy { it.index }.forEach { (index, pane) ->
             if (none { it.terminalId == pane.terminalId }) add(index.coerceAtMost(size), pane)
@@ -722,8 +725,8 @@ private fun HerdrTabGroup(
             key(pane.terminalId) {
                 HerdrAgentRow(
                     pane = pane,
-                    title = agent?.name ?: pane.title ?: pane.terminalTitle ?: pane.label
-                        ?: tab.label.ifBlank { "Terminal" },
+                    title = agent?.name ?: (pane.title ?: pane.terminalTitle)?.let { paneTitle(it, singleServer) }
+                        ?: pane.label ?: tab.label.ifBlank { "Terminal" },
                     onFocus = { onFocusPane(pane) },
                     onClose = { onClosePane(pane) },
                     onClosingChange = { isClosing ->
@@ -819,7 +822,7 @@ private fun HerdrAgentRowContent(pane: HerdrPane, title: String, onFocus: () -> 
     var menuVisible by remember(pane.terminalId) { mutableStateOf(false) }
     val statusColor = agentStatusColor(pane.agentStatus)
     val background = if (pane.focused) {
-        MaterialTheme.colorScheme.primaryContainer
+        MaterialTheme.colorScheme.surfaceContainerHighest
     } else {
         MaterialTheme.colorScheme.surfaceContainerLow
     }

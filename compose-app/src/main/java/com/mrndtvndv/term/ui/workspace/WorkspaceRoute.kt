@@ -212,13 +212,14 @@ fun WorkspaceRoute(
                 tabsButton()
             }
         }
+        val singleServer = LocalSingleRemoteServer.current
         TabsGrid(
             visible = gridVisible,
             workspaces = workspaceState.workspacesFor(serverId).map { item ->
                 WorkspaceItem(item.id, item.name, item.root, item.tabs.size, item.id == workspace.id)
             },
             tabs = workspace.tabs.map { tab ->
-                tabCard(tab, terminals, tab.id == workspace.activeTabId)
+                tabCard(tab, terminals, tab.id == workspace.activeTabId, singleServer)
             },
             addOptions = TabAddOptions(canAddSftp = canAddSftp, canAddGit = canAddGit),
             actions = gridActions,
@@ -265,21 +266,21 @@ private fun needsOverlayTabsButton(
     is Tab.Sftp, is Tab.Viewer -> false
 }
 
-private fun tabCard(tab: Tab, terminals: Map<String, TerminalEntry>, current: Boolean): TabCard {
+private fun tabCard(tab: Tab, terminals: Map<String, TerminalEntry>, current: Boolean, singleServer: Boolean): TabCard {
     val entry = terminals[tab.id]
     return when (tab) {
         is Tab.Terminal -> TabCard(
             id = tab.id,
             kind = TabKind.Terminal,
-            title = tabLabel(tab, terminals),
+            title = tabLabel(tab, terminals, singleServer),
             subtitle = entry?.session?.reportedCwd ?: tab.cwd,
             running = entry?.running ?: true,
             exitStatus = entry?.takeIf { !it.running }?.session?.exitStatus ?: 0,
             current = current,
         )
-        is Tab.Sftp -> TabCard(tab.id, TabKind.Sftp, tabLabel(tab, terminals), tab.dir, true, 0, current)
-        is Tab.Git -> TabCard(tab.id, TabKind.Git, tabLabel(tab, terminals), tab.repoDir, true, 0, current)
-        is Tab.Viewer -> TabCard(tab.id, TabKind.Viewer, tabLabel(tab, terminals), tab.path, true, 0, current)
+        is Tab.Sftp -> TabCard(tab.id, TabKind.Sftp, tabLabel(tab, terminals, singleServer), tab.dir, true, 0, current)
+        is Tab.Git -> TabCard(tab.id, TabKind.Git, tabLabel(tab, terminals, singleServer), tab.repoDir, true, 0, current)
+        is Tab.Viewer -> TabCard(tab.id, TabKind.Viewer, tabLabel(tab, terminals, singleServer), tab.path, true, 0, current)
     }
 }
 

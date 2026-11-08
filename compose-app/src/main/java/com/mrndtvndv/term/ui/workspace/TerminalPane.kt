@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -18,6 +17,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -37,13 +37,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.mrndtvndv.term.herdr.KeyboardContext
 import com.mrndtvndv.term.data.prefs.AppSettings
 import com.mrndtvndv.term.data.prefs.KeyBarHostAction
 import com.mrndtvndv.term.server.TerminalProgress
 import com.mrndtvndv.term.ui.keyboard.KeyBar
 import com.mrndtvndv.term.ui.keyboard.ModifierKeys
-import com.mrndtvndv.term.ui.keyboard.SoftKeyboardState
-import com.mrndtvndv.term.ui.keyboard.SoftKeyboardVisibilityTracker
 import com.mrndtvndv.term.ui.keyboard.sendKeyBarMacro
 import com.mrndtvndv.term.ui.keyboard.sendKeyBarText
 import com.mrndtvndv.term.ui.keyboard.sendKeyCode
@@ -69,8 +68,6 @@ class TerminalPaneCallbacks(
     val onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit,
 )
 
-/** Keeps the key bar clear of the navigation bar or keyboard. */
-private val KeyBarBottomGap = 6.dp
 
 /** Let the last terminal row use the space right up to the key bar. */
 private val TerminalKeyBarClearance = 0.dp
@@ -101,12 +98,11 @@ private fun Modifier.terminalCanvasLayout(onCoordinates: (LayoutCoordinates) -> 
 @Composable
 private fun Modifier.keyBarLayout(onCoordinates: (LayoutCoordinates) -> Unit): Modifier = this
     .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
-    .padding(bottom = KeyBarBottomGap)
     .onGloballyPositioned(onCoordinates)
 
 /**
  * The terminal fills the page, so the wallpaper and rows run under the status and navigation bars.
- * The key bar floats above the navigation bar and the keyboard. Rows stop above the bar through
+ * The key bar sits right on the navigation bar or the keyboard, as one more row of it. Rows stop above the bar through
  * the canvas's bottom inset unless overlay is enabled; the top inset keeps them below the status bar.
  */
 @Suppress("LongParameterList", "LongMethod")
@@ -122,9 +118,15 @@ fun TerminalPane(
     tabsButton: (@Composable () -> Unit)?,
     callbacks: TerminalPaneCallbacks,
     onHostAction: ((KeyBarHostAction) -> Unit)? = null,
+    privateInput: Boolean = false,
+    keyboardContext: KeyboardContext? = null,
 ) {
     val modifierKeys = remember { ModifierKeys() }
     val imeController = remember(session) { TerminalImeController() }
+    // A password prompt in the pane: the keyboard must not suggest or learn what is typed.
+    SideEffect { imeController.privateInput = privateInput }
+    // What runs in the pane (an agent, a shell, a full-screen program), so the keyboard can adapt.
+    SideEffect { imeController.privateImeOptions = keyboardContext?.imeOption }
     val density = LocalDensity.current
     val terminalKeyBarClearancePx = with(density) { TerminalKeyBarClearance.toPx() }
     var canvasBounds by remember { mutableStateOf(Rect.Zero) }
@@ -159,13 +161,7 @@ fun TerminalPane(
         }
     }
 
-    SoftKeyboardStateEffects(
-        session = session,
-        settings = settings,
-        imeController = imeController,
-        isTerminalActive = isActive,
-        onUpdateSettings = callbacks.onUpdateSettings,
-    )
+    ShowKeyboardOnReturn(session = session, imeController = imeController, isTerminalActive = isActive)
 
     Box(modifier = Modifier.fillMaxSize()) {
         TerminalCanvas(
@@ -228,44 +224,14 @@ fun TerminalPane(
     }
 }
 
+/** Coming back to the terminal (its tab shown again, or the app back in front), the keyboard opens. */
 @Composable
-private fun SoftKeyboardStateEffects(
-    session: TerminalSession,
-    settings: AppSettings,
-    imeController: TerminalImeController,
-    isTerminalActive: Boolean,
-    onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit,
-) {
+private fun ShowKeyboardOnReturn(session: TerminalSession, imeController: TerminalImeController, isTerminalActive: Boolean) {
     val isLifecycleResumed by rememberLifecycleResumed()
-    val imeVisibility = imeController.visibility
-    val keyboardVisibilityTracker = remember(session) { SoftKeyboardVisibilityTracker() }
-    val currentRememberKeyboardState = rememberUpdatedState(settings.rememberSoftKeyboardState)
-    val currentLastSoftKeyboardState = rememberUpdatedState(settings.lastSoftKeyboardState)
-    val currentOnUpdateSettings = rememberUpdatedState(onUpdateSettings)
-
-    LaunchedEffect(imeController, imeVisibility, isTerminalActive, isLifecycleResumed) {
-        if (imeVisibility == TerminalImeVisibility.UNKNOWN) return@LaunchedEffect
-        val visibilityToPersist = keyboardVisibilityTracker.observe(
-            isVisible = imeVisibility == TerminalImeVisibility.VISIBLE,
-            isTerminalActive = isTerminalActive,
-            isLifecycleResumed = isLifecycleResumed
-        )
-        if (visibilityToPersist != null && currentRememberKeyboardState.value) {
-            val state = if (visibilityToPersist) SoftKeyboardState.VISIBLE else SoftKeyboardState.HIDDEN
-            currentOnUpdateSettings.value { it.copy(lastSoftKeyboardState = state) }
-        }
-    }
-    LaunchedEffect(session, isTerminalActive, settings.rememberSoftKeyboardState, isLifecycleResumed) {
-        if (!settings.rememberSoftKeyboardState) return@LaunchedEffect
+    LaunchedEffect(session, isTerminalActive, isLifecycleResumed) {
         if (!isTerminalActive || !isLifecycleResumed) return@LaunchedEffect
-        val stateToRestore = currentLastSoftKeyboardState.value
-        if (stateToRestore == SoftKeyboardState.UNKNOWN) return@LaunchedEffect
         withFrameNanos { }
-        if (stateToRestore == SoftKeyboardState.VISIBLE) {
-            imeController.show()
-        } else {
-            imeController.hide()
-        }
+        imeController.show()
     }
 }
 

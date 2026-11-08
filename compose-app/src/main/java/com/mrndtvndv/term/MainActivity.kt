@@ -43,7 +43,10 @@ class MainActivity : ComponentActivity(), SessionHost {
     private val viewModel: AppViewModel by viewModels {
         viewModelFactory {
             initializer {
-                AppViewModel(sessionManager, sessionManager.notificationState, container.workspaceRepository)
+                AppViewModel(
+                    sessionManager, sessionManager.notificationState, container.workspaceRepository,
+                    localTerminalEnabled = { container.preferences.settings.value.localTerminal },
+                )
             }
         }
     }

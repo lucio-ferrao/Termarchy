@@ -74,6 +74,8 @@ class AppViewModel(
     val notificationState: NotificationState,
     private val repository: WorkspaceRepository,
     private val logEvent: (String) -> Unit = { Log.i("NotifRoute", it) },
+    /** Whether the local terminal is on in the settings. */
+    private val localTerminalEnabled: () -> Boolean = { true },
 ) : ViewModel() {
 
     private val coordinator: ServerCoordinatorAccess get() = sessionManager.coordinator
@@ -130,7 +132,12 @@ class AppViewModel(
      */
     private fun restoreActiveWorkspace() {
         val workspace = repository.state.value.activeWorkspace ?: return
-        if (serverRepository.get(workspace.serverId) == null) return
+        val config = serverRepository.get(workspace.serverId) ?: return
+        // With the local terminal off in the settings, the app opens on the server list, not on a local workspace.
+        if (config.isLocal && !localTerminalEnabled()) {
+            repository.deactivate()
+            return
+        }
         connectServer(workspace.serverId) { server ->
             // A Herdr server always opens through its session, so an older saved workspace is not reopened directly.
             if (server.config.herdrEnabled || isHerdrSessionWorkspace(workspace)) {

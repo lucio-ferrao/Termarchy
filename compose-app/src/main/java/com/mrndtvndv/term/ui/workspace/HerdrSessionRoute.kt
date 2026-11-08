@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import com.mrndtvndv.term.ui.keyboard.KeyBarHomeButton
+import com.mrndtvndv.term.ui.keyboard.LocalInKeyboardRow
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -282,7 +284,7 @@ fun HerdrSessionRoute(
             KeyBarHostAction.Sftp -> openSheet(HerdrSheetKind.Sftp)
         }
     }
-    val agentsButton: @Composable () -> Unit = {
+    val agentsButton: @Composable () -> Unit = agentsButton@{
         val statusDotColor = when (agentButtonStatus) {
             HerdrAgentStatus.Blocked -> MaterialTheme.colorScheme.error
             HerdrAgentStatus.Done -> MaterialTheme.colorScheme.tertiary
@@ -292,6 +294,24 @@ fun HerdrSessionRoute(
             HerdrAgentStatus.Blocked -> "Agents, needs input"
             HerdrAgentStatus.Done -> "Agents, done"
             else -> "Agents"
+        }
+        val openAgents = {
+            sheetRequests.cancel()
+            appViewModel.refreshHerdrContext(serverId)
+            if (settings.agentsSidebar) {
+                openSidebar()
+            } else {
+                agentsSheetVisible = true
+            }
+        }
+        // in the key bar: Ecto's icon as its first key
+        if (LocalInKeyboardRow.current) {
+            KeyBarHomeButton(description = buttonDescription, onClick = openAgents) {
+                statusDotColor?.let { color ->
+                    Box(Modifier.align(Alignment.TopEnd).padding(10.dp).size(8.dp).background(color, CircleShape))
+                }
+            }
+            return@agentsButton
         }
         val interactionSource = remember { MutableInteractionSource() }
         val pressed by interactionSource.collectIsPressedAsState()
@@ -317,15 +337,7 @@ fun HerdrSessionRoute(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clickable(interactionSource = interactionSource, indication = null, role = Role.Button) {
-                        sheetRequests.cancel()
-                        appViewModel.refreshHerdrContext(serverId)
-                        if (settings.agentsSidebar) {
-                            openSidebar()
-                        } else {
-                            agentsSheetVisible = true
-                        }
-                    },
+                    .clickable(interactionSource = interactionSource, indication = null, role = Role.Button, onClick = openAgents),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Default.SmartToy, contentDescription = buttonDescription)
@@ -394,7 +406,7 @@ fun HerdrSessionRoute(
                         },
                         onClosePane = { pane -> appViewModel.closeHerdrPane(serverId, pane.terminalId) },
                         onSwitchServer = appViewModel::connect,
-                        onSwitchToLocal = appViewModel::startLocalTerminal,
+                        onSwitchToLocal = if (settings.localTerminal) appViewModel::startLocalTerminal else null,
                         onOpenServerList = onOpenServerList,
                         onOpenSettings = onOpenSettings,
                         onDismiss = { sidebarOpen = false },

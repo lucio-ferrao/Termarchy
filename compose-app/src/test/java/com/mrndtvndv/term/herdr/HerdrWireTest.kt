@@ -29,6 +29,30 @@ class HerdrWireTest {
     }
 
     @Test
+    fun `reads password input from input_mode and treats its absence as normal input`() {
+        val snapshot = HerdrWire.decodeSnapshot(snapshotResult("r1"))
+
+        assertEquals(false, snapshot.panes.first().passwordInput)
+        assertEquals(true, snapshot.panes.last().passwordInput)
+    }
+
+    @Test
+    fun `reads the foreground program and treats its absence as unknown`() {
+        val snapshot = HerdrWire.decodeSnapshot(snapshotResult("r1"))
+
+        assertEquals(null, snapshot.panes.first().foregroundProcess)
+        assertEquals("sudo", snapshot.panes.last().foregroundProcess)
+    }
+
+    @Test
+    fun `reads the alternate screen and treats its absence as a command line`() {
+        val snapshot = HerdrWire.decodeSnapshot(snapshotResult("r1"))
+
+        assertEquals(false, snapshot.panes.first().alternateScreen)
+        assertEquals(true, snapshot.panes.last().alternateScreen)
+    }
+
+    @Test
     fun `maps unknown agent states to Unknown instead of failing`() {
         val snapshot = HerdrWire.decodeSnapshot(snapshotResult("r1"))
 

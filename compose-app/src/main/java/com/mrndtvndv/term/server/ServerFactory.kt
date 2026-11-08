@@ -38,6 +38,8 @@ class ServerFactory(
     private val context: Context,
     private val onSessionClientCreated: () -> TermuxTerminalSessionClientBase,
     private val onServiceBind: (TerminalSession, serverId: String) -> Unit,
+    /** True with only one remote server saved: shell titles then drop their "user@host:" (see paneTitle). */
+    private val singleServer: () -> Boolean,
 ) {
     /**
      * Connect to the server and return a Server with no terminals yet.
@@ -113,7 +115,9 @@ class ServerFactory(
         if (herdr != null) herdrScope.launch { runCatching { herdr.start() } }
         // A launcher shortcut per Herdr pane, kept while connected; they stay after disconnecting.
         if (herdr != null) {
-            val shortcuts = HerdrShortcutPublisher(context, config.id, herdrControlSocketPath(config.herdrSocketPath, homeDir))
+            val shortcuts = HerdrShortcutPublisher(
+                context, config.id, herdrControlSocketPath(config.herdrSocketPath, homeDir), singleServer,
+            )
             herdrScope.launch { herdr.state.mapNotNull { it.snapshot }.distinctUntilChanged().collect(shortcuts::publish) }
         }
         if (focusBridge?.enabled == true) herdrScope.launch { focusBridge.warmUp() }

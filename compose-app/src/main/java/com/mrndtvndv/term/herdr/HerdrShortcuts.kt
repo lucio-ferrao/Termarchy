@@ -15,6 +15,16 @@ data class HerdrPaneShortcut(
     val isClaude: Boolean,
 )
 
+private val UserHostPrefix = Regex("""^[^\s@:]+@[^\s:]+:\s*""")
+
+/**
+ * A pane or tab [title] as shown: with [singleServer] (only one remote server saved), without the "user@host:" a
+ * shell puts at its start ("lef@Corsair:~/lira" → "~/lira"), which then only repeats the server; the whole title when
+ * nothing would be left.
+ */
+fun paneTitle(title: String, singleServer: Boolean): String =
+    if (singleServer) UserHostPrefix.replaceFirst(title, "").ifEmpty { title } else title
+
 /** Stable across reconnects: the terminal ID survives pane moves, and the server ID keeps servers apart. */
 fun herdrShortcutId(serverId: String, terminalId: String): String = "herdr:$serverId:$terminalId"
 
@@ -22,10 +32,11 @@ fun herdrShortcutId(serverId: String, terminalId: String): String = "herdr:$serv
  * The shortcut of [pane]: named by its terminal title without the status glyph (for Claude, the conversation's
  * title), else by the agent and the folder, else by the folder.
  */
-fun herdrPaneShortcut(serverId: String, pane: HerdrPane): HerdrPaneShortcut {
+fun herdrPaneShortcut(serverId: String, pane: HerdrPane, singleServer: Boolean): HerdrPaneShortcut {
     val folder = (pane.foregroundCwd ?: pane.cwd)?.trimEnd('/')?.substringAfterLast('/').orEmpty()
     val agent = pane.agent?.takeIf { it.isNotBlank() }
     val title = (pane.terminalTitleStripped ?: pane.terminalTitle)?.trim()?.takeIf { it.isNotEmpty() }
+        ?.let { paneTitle(it, singleServer) }
     val label = title ?: listOfNotNull(agent, folder.ifEmpty { null }).joinToString(" ").ifEmpty { pane.terminalId }
     return HerdrPaneShortcut(
         id = herdrShortcutId(serverId, pane.terminalId),

@@ -67,8 +67,30 @@ internal class ImeHost(
 ) {
     private var node: ImeHostNode? = null
 
+    /** See [com.termux.terminal.compose.TerminalImeController.privateInput]. */
+    internal var privateInput = false
+        private set
+
     fun open() {
         node?.open()
+    }
+
+    /** Switches between normal and private input, restarting a live input session so the keyboard notices. */
+    fun setPrivateInput(private: Boolean) {
+        if (privateInput == private) return
+        privateInput = private
+        node?.restart()
+    }
+
+    /** See [com.termux.terminal.compose.TerminalImeController.privateImeOptions]. */
+    internal var privateImeOptions: String? = null
+        private set
+
+    /** Changes the options for the keyboard, restarting a live input session so the keyboard notices. */
+    fun setPrivateImeOptions(options: String?) {
+        if (privateImeOptions == options) return
+        privateImeOptions = options
+        node?.restart()
     }
 
     fun close() {
@@ -137,7 +159,11 @@ internal class ImeHostNode(
                 val hostView = view
                 startInputMethod(
                     PlatformTextInputMethodRequest { editorInfo ->
-                        editorInfo.configureForTerminal(imeHost.acceptsCommitContent())
+                        editorInfo.configureForTerminal(
+                            imeHost.acceptsCommitContent(),
+                            imeHost.privateInput,
+                            imeHost.privateImeOptions,
+                        )
                         val inputConnection = TerminalInputConnection(hostView, imeHost.onEditCommands)
                         @Suppress("DEPRECATION")
                         InputConnectionCompat.createWrapper(
@@ -155,6 +181,14 @@ internal class ImeHostNode(
                 )
             }
         }
+    }
+
+    /** Starts the live input session again, with the current settings. Nothing when no session is open. */
+    fun restart() {
+        if (sessionJob?.isActive != true) return
+        sessionJob?.cancel()
+        sessionJob = null
+        open()
     }
 
     private fun showSoftInput() {
@@ -252,11 +286,22 @@ internal class TerminalInputConnection(
     }
 }
 
-internal fun EditorInfo.configureForTerminal(acceptsCommitContent: Boolean) {
-    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+internal fun EditorInfo.configureForTerminal(
+    acceptsCommitContent: Boolean,
+    privateInput: Boolean = false,
+    privateImeOptions: String? = null,
+) {
+    // Private input (a password prompt) is a password field: no suggestions, corrections or learning.
+    inputType = InputType.TYPE_CLASS_TEXT or if (privateInput) {
+        InputType.TYPE_TEXT_VARIATION_PASSWORD
+    } else {
+        InputType.TYPE_TEXT_FLAG_MULTI_LINE
+    }
     imeOptions = EditorInfo.IME_ACTION_NONE or
         EditorInfo.IME_FLAG_FORCE_ASCII or
-        EditorInfo.IME_FLAG_NO_FULLSCREEN
+        EditorInfo.IME_FLAG_NO_FULLSCREEN or
+        if (privateInput) EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING else 0
+    this.privateImeOptions = privateImeOptions
     initialSelStart = 0
     initialSelEnd = 0
     if (acceptsCommitContent) {

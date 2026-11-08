@@ -22,6 +22,8 @@ class HerdrShortcutPublisher(
     private val context: Context,
     private val serverId: String,
     private val socketPath: String,
+    /** True with only one remote server saved (see [paneTitle]). */
+    private val singleServer: () -> Boolean,
 ) {
     fun publish(snapshot: HerdrSnapshot) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) return
@@ -31,7 +33,8 @@ class HerdrShortcutPublisher(
             val existing = manager.dynamicShortcuts
             val prefix = herdrShortcutId(serverId, "")
             val ours = existing.filter { it.id.startsWith(prefix) }.associateBy { it.id }
-            val shortcuts = snapshot.panes.map { herdrPaneShortcut(serverId, it) }
+            val single = singleServer()
+            val shortcuts = snapshot.panes.map { herdrPaneShortcut(serverId, it, single) }
             val changed = shortcuts.filter { shortcut ->
                 val shown = ours[shortcut.id] ?: return@filter true
                 shown.shortLabel?.toString() != shortcut.shortLabel || shown.longLabel?.toString() != longLabel(shortcut)

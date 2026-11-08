@@ -255,6 +255,9 @@ private class PaneDto(
     val tokens: Map<String, String> = emptyMap(),
     val scroll: ScrollDto? = null,
     val revision: Long = 0,
+    @SerialName("input_mode") val inputMode: String? = null,
+    @SerialName("foreground_process") val foregroundProcess: String? = null,
+    val screen: String? = null,
 ) {
     fun toModel() = HerdrPane(
         id = paneId,
@@ -276,6 +279,9 @@ private class PaneDto(
         scroll = scroll?.toModel(),
         revision = revision,
         terminalTitleStripped = terminalTitleStripped,
+        passwordInput = inputMode == "password",
+        foregroundProcess = foregroundProcess,
+        alternateScreen = screen == "alternate",
     )
 }
 

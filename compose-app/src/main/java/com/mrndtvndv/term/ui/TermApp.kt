@@ -2,7 +2,6 @@
 
 package com.mrndtvndv.term.ui
 
-import android.graphics.Typeface
 import android.util.Log
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -39,6 +38,7 @@ import com.mrndtvndv.term.navigation.AppNavDisplay
 import com.mrndtvndv.term.navigation.AppRoute
 import com.mrndtvndv.term.navigation.LocalAnimationsEnabled
 import com.mrndtvndv.term.server.TerminalEntry
+import com.mrndtvndv.term.ui.workspace.LocalSingleRemoteServer
 import com.mrndtvndv.term.ui.addserver.AddServerScreen
 import com.mrndtvndv.term.ui.addserver.FocusBridgeControls
 import com.mrndtvndv.term.ui.notification.InAppNotificationBanner
@@ -106,12 +106,15 @@ fun TermApp(
         }
     }
     val terminalTypeface = remember(settings.customFontName) {
-        container.fontStore.loadTypeface() ?: Typeface.MONOSPACE
+        container.fontStore.loadTerminalTypeface()
     }
 
     val appTheme = resolveAppTheme(settings.theme)
     TermuxGhosttyTheme(theme = appTheme, amoledBlack = settings.amoledBlack, customFontFamily = customFontFamily) {
-        CompositionLocalProvider(LocalAnimationsEnabled provides settings.animationsEnabled) {
+        CompositionLocalProvider(
+            LocalAnimationsEnabled provides settings.animationsEnabled,
+            LocalSingleRemoteServer provides (serverListState.servers.count { !it.isLocal } == 1),
+        ) {
             Surface(modifier = Modifier.fillMaxSize()) {
                 // Drop the in-memory decoded wallpaper once wallpapering is disabled so its
                 // bitmap can be reclaimed. The saved URI/name/id and its persisted grant stay
@@ -183,7 +186,7 @@ fun TermApp(
                                     onDisconnect = appViewModel::disconnect,
                                     onAdd = { navigator.navigate(AppRoute.AddServer) },
                                     onSettingsClick = { navigator.navigate(AppRoute.Settings) },
-                                    onStartLocal = appViewModel::startLocalTerminal,
+                                    onStartLocal = if (settings.localTerminal) appViewModel::startLocalTerminal else null,
                                     localConfig = serverListState.localConfig,
                                     storageError = serverListState.storageError,
                                     onSetStartupCommand = appViewModel::setLocalStartupCommand,

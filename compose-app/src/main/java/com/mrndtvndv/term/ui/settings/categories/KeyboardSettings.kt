@@ -35,15 +35,6 @@ fun LazyListScope.keyboardSettings(state: SettingsState) {
                         enabled = state.settings.autoShowKeyboardOnTap,
                     )
                 },
-                { shapes ->
-                    SwitchRow(
-                        title = "Remember keyboard state",
-                        checked = state.settings.rememberSoftKeyboardState,
-                        onChange = { checked -> state.onUpdate { it.copy(rememberSoftKeyboardState = checked) } },
-                        shapes = shapes,
-                        summary = "Restore the terminal keyboard's last visibility when reopening it",
-                    )
-                },
             ),
         )
     }

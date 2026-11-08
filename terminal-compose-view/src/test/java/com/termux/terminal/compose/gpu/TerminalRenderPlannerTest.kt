@@ -189,6 +189,63 @@ class TerminalRenderPlannerTest {
     }
 
     @Test
+    fun splitsContextualRunsAtBreaksAndFaceChanges() {
+        val faces = intArrayOf(0, 0, NoRun, 0, NoRun, 1, 1, 0, 0, 0)
+
+        assertEquals(listOf(0..1, 5..6, 7..9), contextualRuns(faces))
+        assertEquals(emptyList<IntRange>(), contextualRuns(intArrayOf(0, NoRun, 1)))
+    }
+
+    @Test
+    fun shapesNeighbouringCellsTogetherAndBreaksAtSpacesAndTheBlockCursor() {
+        val shaped = ArrayList<String>()
+        val shaper = TerminalRunShaper { text, start, count, _ ->
+            val run = String(text, start, count)
+            shaped += run
+            IntArray(count) { index -> if (index > 0 && run.startsWith("->", index - 1)) 100 else run[index].code }
+        }
+        val text = "a->b x->"
+        val row = TerminalRow(
+            columns = text.length,
+            text = text.toCharArray(),
+            charsUsed = text.length,
+            styles = LongArray(text.length) { indexedStyle(3, 0) },
+            contentHash = 21L,
+            cellLayout = TerminalCellLayout(
+                start = IntArray(text.length) { it },
+                length = IntArray(text.length) { 1 },
+                displayWidth = IntArray(text.length) { 1 }
+            ),
+            isLineWrap = false
+        )
+        val base = testFrame(21L)
+        val frame = TerminalFrame(
+            sequence = base.sequence,
+            viewport = base.viewport.copy(columns = text.length),
+            cursor = TerminalCursor(7, 0, true, TerminalCursor.STYLE_BLOCK),
+            modes = base.modes,
+            palette = base.palette,
+            rows = listOf(row),
+            linkLayout = null
+        )
+
+        val glyphs = TerminalRenderPlanner(shaper)
+            .plan(GlesTerminalSnapshot(frame, testSnapshot(21L).metrics))
+            .glyphs
+
+        assertEquals(listOf("a->b", "x-"), shaped)
+        val arrowHead = glyphs[2].key
+        assertEquals(">", arrowHead.text)
+        assertEquals(100, arrowHead.glyphId)
+        assertEquals("a->b", arrowHead.context)
+        assertEquals(2, arrowHead.contextOffset)
+        val underCursor = glyphs.last().key
+        assertEquals(">", underCursor.text)
+        assertEquals(GlyphAtlasKey.NO_GLYPH, underCursor.glyphId)
+        assertNull(underCursor.context)
+    }
+
+    @Test
     fun plansAllCursorShapesWithoutChangingTheSnapshot() {
         val base = testFrame(12L)
         val metrics = testSnapshot(12L).metrics

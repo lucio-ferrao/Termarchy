@@ -19,6 +19,11 @@ private const val OverscanRows = 1
 private const val RenderRowOrigin = -OverscanRows
 private const val RetainedFrameCapacity = 4
 
+/** Cells that never join a contextual run: glyphs drawn by id carry no underline or strikethrough. */
+private const val NoRunEffects = TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE or
+    TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE or
+    TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH
+
 internal data class TerminalQuad(
     val left: Float,
     val top: Float,
@@ -71,8 +76,11 @@ internal class TerminalRenderRowPlan(
  * The planner owns no backend or Compose state. It retains only bounded,
  * immutable row packets for the visible rows; each plan belongs to one draw.
  */
-internal class TerminalRenderPlanner {
+internal class TerminalRenderPlanner(
+    private val shaper: TerminalRunShaper = PlatformRunShaper
+) {
     private val measurePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG)
+    private val shapePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG)
     private var cachedSnapshot: GlesTerminalSnapshot? = null
     private var cachedPlan: TerminalRenderPlan? = null
     private val recentFrames = ArrayDeque<TerminalFrame>(RetainedFrameCapacity)
@@ -295,6 +303,14 @@ internal class TerminalRenderPlanner {
         val glyphs = ArrayList<TerminalGlyphPlacement>()
         val decorations = ArrayList<TerminalQuad>()
         val maxColumn = minOf(frame.columns, row.columns)
+        val blockCursorColumn = if (
+            cursor.visible && absoluteRow == cursor.row && cursor.style == TerminalCursor.STYLE_BLOCK
+        ) {
+            cursor.column
+        } else {
+            -1
+        }
+        val contextual = contextualCells(snapshot, row, maxColumn, blockCursorColumn)
         var column = 0
         while (column < maxColumn) {
             val displayWidth = row.cellDisplayWidth(column)
@@ -375,14 +391,14 @@ internal class TerminalRenderPlanner {
                                 visual = snapshot.visual,
                                 targetWidth = cellWidth * metrics.cellWidthPx
                             ),
-                            bold = effect and (
-                                TextStyle.CHARACTER_ATTRIBUTE_BOLD or
-                                    TextStyle.CHARACTER_ATTRIBUTE_BLINK
-                                ) != 0,
+                            bold = isBold(effect),
                             italic = effect and TextStyle.CHARACTER_ATTRIBUTE_ITALIC != 0,
                             underline = effect and TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE != 0,
                             strikeThrough = effect and TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH != 0,
-                            rasterMode = rasterMode
+                            rasterMode = rasterMode,
+                            glyphId = contextual?.glyphIds?.get(column) ?: GlyphAtlasKey.NO_GLYPH,
+                            context = contextual?.contexts?.get(column),
+                            contextOffset = contextual?.offsets?.get(column) ?: 0
                         ),
                         left = left,
                         top = rowTop,
@@ -410,6 +426,66 @@ internal class TerminalRenderPlanner {
             decorations = decorations.toList()
         )
     }
+
+    /** Per column, the glyph a cell takes in its run and the run's text; null when the row has no run. */
+    private class ContextualCells(columns: Int) {
+        val glyphIds = IntArray(columns) { GlyphAtlasKey.NO_GLYPH }
+        val contexts = arrayOfNulls<String>(columns)
+        val offsets = IntArray(columns)
+    }
+
+    /**
+     * Shapes the row's runs of single-char cells, as Ghostty does, so each cell gets the glyph its neighbours select.
+     * Spaces, wide or composed cells, possible emoji, underlined or struck-through cells and the block cursor's cell
+     * break the runs, as does a bold change.
+     */
+    private fun contextualCells(
+        snapshot: GlesTerminalSnapshot,
+        row: com.termux.terminal.compose.TerminalRow,
+        maxColumn: Int,
+        blockCursorColumn: Int
+    ): ContextualCells? {
+        val text = row.text()
+        val chars = CharArray(maxColumn)
+        val faces = IntArray(maxColumn) { NoRun }
+        for (column in 0 until maxColumn) {
+            if (column == blockCursorColumn || row.cellDisplayWidth(column) != 1) continue
+            val range = row.cellTextRange(column) ?: continue
+            if (range.first != range.last || range.first !in 0 until row.charsUsed) continue
+            val char = text[range.first]
+            if (Character.isWhitespace(char) || Character.isSurrogate(char) ||
+                isPotentialColorCodePoint(char.code)
+            ) {
+                continue
+            }
+            val effect = TextStyle.decodeEffect(row.style(column))
+            if (effect and NoRunEffects != 0) continue
+            chars[column] = char
+            faces[column] = if (isBold(effect)) 1 else 0
+        }
+        val runs = contextualRuns(faces)
+        if (runs.isEmpty()) return null
+        val cells = ContextualCells(maxColumn)
+        shapePaint.reset()
+        shapePaint.flags = Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG
+        shapePaint.textSize = snapshot.visual.fontSizePx
+        shapePaint.fontFeatureSettings = TerminalFontFeatures
+        runs.forEach { run ->
+            shapePaint.typeface = cellTypeface(snapshot.visual.typeface, faces[run.first] == 1)
+            val count = run.last - run.first + 1
+            val glyphIds = shaper.glyphIds(chars, run.first, count, shapePaint) ?: return@forEach
+            val context = String(chars, run.first, count)
+            for (column in run) {
+                cells.glyphIds[column] = glyphIds[column - run.first]
+                cells.contexts[column] = context
+                cells.offsets[column] = column - run.first
+            }
+        }
+        return cells
+    }
+
+    private fun isBold(effect: Int): Boolean =
+        effect and (TextStyle.CHARACTER_ATTRIBUTE_BOLD or TextStyle.CHARACTER_ATTRIBUTE_BLINK) != 0
 
     @Suppress("LongParameterList")
     private fun planLinkDecorations(
@@ -499,12 +575,10 @@ internal class TerminalRenderPlanner {
         val effect = TextStyle.decodeEffect(style)
         measurePaint.reset()
         measurePaint.flags = Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG
-        measurePaint.typeface = visual.typeface ?: android.graphics.Typeface.MONOSPACE
+        measurePaint.typeface = cellTypeface(visual.typeface, isBold(effect))
+        measurePaint.fontFeatureSettings = TerminalFontFeatures
         measurePaint.textSize = visual.fontSizePx
         measurePaint.textScaleX = metrics.textScaleX
-        measurePaint.isFakeBoldText = effect and (
-            TextStyle.CHARACTER_ATTRIBUTE_BOLD or TextStyle.CHARACTER_ATTRIBUTE_BLINK
-        ) != 0
         measurePaint.textSkewX = if (effect and TextStyle.CHARACTER_ATTRIBUTE_ITALIC != 0) {
             GlesItalicTextSkewX
         } else {

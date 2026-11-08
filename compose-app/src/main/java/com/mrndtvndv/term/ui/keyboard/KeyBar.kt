@@ -7,22 +7,25 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,13 +43,16 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.mrndtvndv.term.R
 import com.mrndtvndv.term.data.prefs.ArrowJoystickMode
 import com.mrndtvndv.term.data.prefs.KeyBarAction
 import com.mrndtvndv.term.data.prefs.KeyBarHostAction
@@ -54,7 +60,6 @@ import com.mrndtvndv.term.data.prefs.KeyBarItem
 import com.mrndtvndv.term.data.prefs.KeyBarLayout
 import com.mrndtvndv.term.data.prefs.MacroStep
 import com.mrndtvndv.term.data.prefs.isSwipeable
-import com.mrndtvndv.term.ui.components.tintedGlassPill
 import com.termux.terminal.KeyHandler
 import com.termux.terminal.TerminalSession
 import kotlinx.coroutines.delay
@@ -329,7 +334,12 @@ fun ArrowJoystick(mode: ArrowJoystickMode, onArrow: (ArrowDirection) -> Unit, mo
     }
 }
 
-private val BarHeight = 48.dp
+// The height of the suggestion strip of the Homekey keyboard (config_suggestions_strip_height), right under the bar.
+private val BarHeight = 40.dp
+// The Homekey key at the start of its strip (1dp margin, 36dp wide: config_suggestions_strip_edge_key_width), so the
+// Ecto button sits right above it.
+private val HomeButtonStart = 1.dp
+private val HomeButtonWidth = 36.dp
 
 /** Width of the fade that marks more keys off the end of the scrolling strip. */
 private val EdgeFadeWidth = 16.dp
@@ -366,8 +376,8 @@ private fun Modifier.edgeFade(fadeStart: Boolean, fadeEnd: Boolean): Modifier =
     }
 
 /**
- * The customizable keys in a strip that takes the pill's width left after the host actions, and scrolls
- * when they overflow. Under RTL the strip scrolls from the right, and the fades follow the scroll direction.
+ * The customizable keys in a strip that takes the row's width left by the tabs button and the host actions, and
+ * scrolls when they overflow. Under RTL the strip scrolls from the right, and the fades follow the scroll direction.
  */
 @Composable
 private fun RowScope.KeyStrip(content: @Composable RowScope.() -> Unit) {
@@ -378,7 +388,7 @@ private fun RowScope.KeyStrip(content: @Composable RowScope.() -> Unit) {
     val preview = LocalKeySwipePreview.current
     Row(
         modifier = Modifier
-            .weight(1f, fill = false)
+            .weight(1f)
             .fillMaxHeight()
             .horizontalScroll(scrollState, reverseScrolling = isRtl)
             .edgeFade(fadeStart = fadeStart, fadeEnd = fadeEnd)
@@ -388,46 +398,76 @@ private fun RowScope.KeyStrip(content: @Composable RowScope.() -> Unit) {
     )
 }
 
+/** True inside the key bar, where buttons are drawn flat like the keys of the keyboard row (see [KeyBarHomeButton]). */
+val LocalInKeyboardRow = staticCompositionLocalOf { false }
+
 /**
- * Floating glass bar with the key row and the tabs button beside it. The terminal renderer blurs
- * the area under [pillModifier], so the pill is tinted rather than sampled. [hostActions] sit after
- * the scrolling [keys] and stay fixed when the strip overflows.
+ * The key bar as one more row of the keyboard under it: full width, on the keyboard's background, its keys drawn
+ * like the keyboard's. The tabs button comes first, then the scrolling [keys], then [hostActions], fixed at the end
+ * when the strip overflows. [pillModifier] marks the row for the terminal (its geometry and blur region).
  */
 @Composable
-private fun FloatingBar(
+private fun KeyboardRow(
     tabsButton: (@Composable () -> Unit)?,
     modifier: Modifier = Modifier,
     pillModifier: Modifier = Modifier,
     keys: @Composable RowScope.() -> Unit,
     hostActions: @Composable RowScope.() -> Unit,
 ) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Surface(
-            modifier = Modifier.weight(1f, fill = false).then(pillModifier.tintedGlassPill(CircleShape)),
-            shape = CircleShape,
-            color = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ) {
+    val colors = MaterialTheme.colorScheme.copy(
+        onSurface = KeyboardRowColors.keyText,
+        secondaryContainer = KeyboardRowColors.key,
+        onSecondaryContainer = KeyboardRowColors.keyText,
+        primary = KeyboardRowColors.accent,
+        onPrimary = KeyboardRowColors.keyText,
+        surfaceContainerHighest = KeyboardRowColors.key,
+    )
+    MaterialTheme(colorScheme = colors) {
+        CompositionLocalProvider(LocalInKeyboardRow provides true, LocalContentColor provides KeyboardRowColors.keyText) {
             Row(
-                modifier = Modifier.height(BarHeight).padding(horizontal = 6.dp),
+                modifier = modifier
+                    .fillMaxWidth()
+                    .then(pillModifier)
+                    .background(KeyboardRowColors.background)
+                    .height(BarHeight)
+                    .padding(start = HomeButtonStart, end = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                tabsButton?.invoke()
                 KeyStrip(content = keys)
                 hostActions()
             }
         }
-        tabsButton?.invoke()
     }
 }
 
 /**
- * Bottom key bar for the terminal: the customizable [layout] in a horizontal strip, then [agents]. [onHostAction]
- * runs Herdr host actions. It is null outside the Herdr route, so host items are hidden and their swipes are never
- * claimed. [tabsButton] sits beside the pill.
+ * The button that opens the tabs (or Herdr's agents) as the first key of the key bar: Ecto's icon, flat in the key
+ * color, with [badge] over it (a tab count, a status dot).
+ */
+@Composable
+fun KeyBarHomeButton(description: String, onClick: () -> Unit, badge: @Composable BoxScope.() -> Unit = {}) {
+    Box(
+        modifier = Modifier
+            .size(width = HomeButtonWidth, height = BarHeight)
+            .semantics { contentDescription = description }
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_launcher_monochrome),
+            contentDescription = null,
+            modifier = Modifier.size(HomeButtonWidth),
+            tint = KeyboardRowColors.keyText,
+        )
+        badge()
+    }
+}
+
+/**
+ * Bottom key bar for the terminal, as a row of the keyboard: [tabsButton] first, the customizable [layout] in a
+ * horizontal strip, then [agents]. [onHostAction] runs Herdr host actions. It is null outside the Herdr route, so host
+ * items are hidden and their swipes are never claimed.
  */
 @Composable
 @Suppress("LongParameterList")
@@ -459,7 +499,7 @@ fun KeyBar(
     val preview = remember { KeySwipePreviewHost() }
     CompositionLocalProvider(LocalKeySwipePreview provides preview) {
         Box(modifier = modifier.onGloballyPositioned { preview.barBounds = it.boundsInWindow() }) {
-            FloatingBar(
+            KeyboardRow(
                 tabsButton = tabsButton,
                 pillModifier = pillModifier,
                 keys = {

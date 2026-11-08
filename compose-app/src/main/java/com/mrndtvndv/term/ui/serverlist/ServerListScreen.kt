@@ -44,7 +44,8 @@ fun ServerListScreen(
     connectingId: String? = null,
     onAdd: () -> Unit,
     onSettingsClick: () -> Unit,
-    onStartLocal: () -> Unit,
+    /** Opens the local terminal; null when it is off in the settings, which hides its card. */
+    onStartLocal: (() -> Unit)?,
     localConfig: ServerConfig?,
     onSetStartupCommand: (String) -> Unit,
     onUpdateLocalConfig: (
@@ -98,8 +99,8 @@ fun ServerListScreen(
                 }
             }
 
-            // ── Local Terminal card (always visible) ────────────────
-            item(key = "local_terminal") {
+            // ── Local Terminal card, when it is on in the settings ────────────────
+            if (onStartLocal != null) item(key = "local_terminal") {
                 LocalTerminalCard(
                     onClick = onStartLocal,
                     startupCommand = localConfig?.startupCommand,
