@@ -93,6 +93,8 @@ class AppSessionManager private constructor(context: Context) : AppSessionManage
     }
 
     private fun handleHerdrEndpointNotification(server: Server, message: HerdrEndpointWire.Message.Notification) {
+        // An agent finishing its turn is not notified; the agents sheet shows it. Needing attention still is.
+        if (message.finished) return
         appScope.launch {
             if (coordinator.getServer(server.config.id) !== server) return@launch
             val pane = server.herdr?.state?.value?.snapshot?.panes?.firstOrNull {

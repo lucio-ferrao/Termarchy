@@ -13,11 +13,15 @@ internal object HerdrEndpointWire {
     private const val MAX_FRAME_BYTES = 8 * 1024 * 1024
     private const val ENDPOINT_CONTROL = 20L
     private const val SEMANTIC_NOTIFICATION = 14L
+    // herdr's SemanticNotificationKind, in declaration order: NeedsAttention, Finished, UpdateInstalled, Custom
+    private const val KIND_FINISHED = 1L
     private val json = Json { ignoreUnknownKeys = true }
 
     sealed interface Message {
         data class Control(val kind: String, val data: String) : Message
         data class Notification(
+            /** An agent finished its turn (herdr's Finished), rather than needing attention. */
+            val finished: Boolean,
             val title: String,
             val body: String?,
             val workspaceId: String?,
@@ -64,7 +68,7 @@ internal object HerdrEndpointWire {
         return when (cursor.integer()) {
             ENDPOINT_CONTROL -> Message.Control(cursor.string(), cursor.string()).also { cursor.requireEnd() }
             SEMANTIC_NOTIFICATION -> {
-                cursor.integer() // kind
+                val finished = cursor.integer() == KIND_FINISHED
                 val title = cursor.string()
                 val body = cursor.optionalString()
                 cursor.optionalInteger() // sound
@@ -73,7 +77,7 @@ internal object HerdrEndpointWire {
                 val tabId = cursor.optionalString()
                 val paneId = cursor.optionalString()
                 cursor.optionalInteger() // position
-                Message.Notification(title, body, workspaceId, tabId, paneId).also { cursor.requireEnd() }
+                Message.Notification(finished, title, body, workspaceId, tabId, paneId).also { cursor.requireEnd() }
             }
             else -> Message.Other
         }
