@@ -139,6 +139,8 @@ data class HerdrPane(
     val foregroundProcess: String? = null,
     /** The program shows the alternate screen (herdr's `screen`), as full-screen programs do; false if not reported. */
     val alternateScreen: Boolean = false,
+    /** When the agent's state last changed, wall-clock millis (herdr's `agent_status_since`); null if not reported. */
+    val agentStatusSince: Long? = null,
 )
 
 data class HerdrAgent(

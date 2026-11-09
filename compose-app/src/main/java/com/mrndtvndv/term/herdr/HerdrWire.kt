@@ -258,6 +258,7 @@ private class PaneDto(
     @SerialName("input_mode") val inputMode: String? = null,
     @SerialName("foreground_process") val foregroundProcess: String? = null,
     val screen: String? = null,
+    @SerialName("agent_status_since") val agentStatusSince: Long? = null,
 ) {
     fun toModel() = HerdrPane(
         id = paneId,
@@ -282,6 +283,7 @@ private class PaneDto(
         passwordInput = inputMode == "password",
         foregroundProcess = foregroundProcess,
         alternateScreen = screen == "alternate",
+        agentStatusSince = agentStatusSince,
     )
 }
 

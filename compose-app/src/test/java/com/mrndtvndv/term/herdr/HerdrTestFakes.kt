@@ -416,7 +416,7 @@ internal const val SnapshotJsonFixture: String = """{
       "label":"é🚀","agent":"claude","agent_status":"working","state_labels":{"working":"Working"},"revision":5,
       "scroll":{"offset_from_bottom":0,"max_offset_from_bottom":10,"viewport_rows":24}},
     {"pane_id":"p-2","terminal_id":"t-2","workspace_id":"ws-1","tab_id":"tab-2","focused":false,
-      "agent_status":"from_the_future","revision":1,"input_mode":"password","foreground_process":"sudo","screen":"alternate"}
+      "agent_status":"from_the_future","revision":1,"input_mode":"password","foreground_process":"sudo","screen":"alternate","agent_status_since":1794225000000}
   ],
   "layouts":[{"workspace_id":"ws-1","tab_id":"tab-1","zoomed":false,"area":{"x":0,"y":0,"width":80,"height":24},
     "focused_pane_id":"p-1","panes":[{"pane_id":"p-1","focused":true,"rect":{"x":0,"y":0,"width":40,"height":24}}],

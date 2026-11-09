@@ -89,6 +89,7 @@ import androidx.compose.ui.window.PopupProperties
 import com.mrndtvndv.processicons.agentIconResource
 import com.mrndtvndv.term.ServerListUiState
 import com.mrndtvndv.term.domain.ServerConfig
+import com.mrndtvndv.term.herdr.herdrTabName
 import com.mrndtvndv.term.herdr.paneTitle
 import com.mrndtvndv.term.herdr.HerdrAgentStatus
 import com.mrndtvndv.term.herdr.HerdrPane
@@ -720,13 +721,20 @@ private fun HerdrTabGroup(
             modifier = Modifier.fillMaxWidth().clickable(onClick = onFocusTab)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         )
+        val tabName = herdrTabName(tab.label)?.let { paneTitle(it, singleServer) }
         panes.forEachIndexed { index, pane ->
             val agent = snapshot.agents.firstOrNull { it.terminalId == pane.terminalId }
+            val own = agent?.name ?: (pane.title ?: pane.terminalTitle)?.let { paneTitle(it, singleServer) }
+                ?: pane.label ?: tab.label.ifBlank { "Terminal" }
             key(pane.terminalId) {
                 HerdrAgentRow(
                     pane = pane,
-                    title = agent?.name ?: (pane.title ?: pane.terminalTitle)?.let { paneTitle(it, singleServer) }
-                        ?: pane.label ?: tab.label.ifBlank { "Terminal" },
+                    // the name of the tab, as in the shortcuts: with the pane's own title when the tab has more panes
+                    title = when {
+                        tabName == null -> own
+                        panes.size > 1 && own != tabName -> "$tabName · $own"
+                        else -> tabName
+                    },
                     onFocus = { onFocusPane(pane) },
                     onClose = { onClosePane(pane) },
                     onClosingChange = { isClosing ->

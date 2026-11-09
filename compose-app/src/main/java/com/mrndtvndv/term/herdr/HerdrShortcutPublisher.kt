@@ -6,6 +6,7 @@ import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
 import android.os.Build
+import android.os.PersistableBundle
 import android.util.Log
 import com.mrndtvndv.term.MainActivity
 import com.mrndtvndv.term.R
@@ -14,9 +15,11 @@ import com.mrndtvndv.term.ui.notification.NotificationDestinationCodec
 
 /**
  * Keeps one launcher shortcut per pane of a server's Herdr session, opening the app on that pane (connecting first,
- * as a notification tap does). A shortcut is updated only when its title or agent status changes, so its last-change
- * time tells a launcher which sessions moved last. Panes gone from the session lose their shortcut; disconnecting
- * keeps them, so they still open the session later.
+ * as a notification tap does): the most recent ones, as many as the launcher takes, named by their Herdr tab. Each one
+ * tells a launcher how recent it is in its extras: [EXTRA_TIME], when its agent last changed state, and
+ * [EXTRA_ACTIVE] while it works or waits for input (as recent as now). A shortcut is updated only when what it shows
+ * or tells changes. Panes gone from the session lose their shortcut; disconnecting keeps them, so they still open the
+ * session later.
  */
 class HerdrShortcutPublisher(
     private val context: Context,
@@ -25,6 +28,12 @@ class HerdrShortcutPublisher(
     /** True with only one remote server saved (see [paneTitle]). */
     private val singleServer: () -> Boolean,
 ) {
+    /**
+     * For a Herdr that does not say when an agent's state changed: the status of each terminal and when this app saw
+     * it change (0 when it was already so when first seen).
+     */
+    private val observed = mutableMapOf<String, Pair<HerdrAgentStatus, Long>>()
+
     fun publish(snapshot: HerdrSnapshot) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) return
         val manager = context.getSystemService(ShortcutManager::class.java) ?: return
@@ -34,20 +43,25 @@ class HerdrShortcutPublisher(
             val prefix = herdrShortcutId(serverId, "")
             val ours = existing.filter { it.id.startsWith(prefix) }.associateBy { it.id }
             val single = singleServer()
-            val shortcuts = snapshot.panes.map { herdrPaneShortcut(serverId, it, single) }
-            val changed = shortcuts.filter { shortcut ->
-                val shown = ours[shortcut.id] ?: return@filter true
-                shown.shortLabel?.toString() != shortcut.shortLabel || shown.longLabel?.toString() != longLabel(shortcut)
-            }.map { it.id }.toSet()
-            val changedAt = shortcuts.associate {
-                it.terminalId to if (it.id in changed) now else ours.getValue(it.id).lastChangedTimestamp
+            val tabs = snapshot.tabs.associate { it.id to it.label }
+            val shortcuts = snapshot.panes.map { pane ->
+                val seen = observed[pane.terminalId]
+                if (seen?.first != pane.agentStatus) observed[pane.terminalId] = pane.agentStatus to (if (seen == null) 0L else now)
+                herdrPaneShortcut(serverId, pane, tabs[pane.tabId], single, observed.getValue(pane.terminalId).second)
             }
-            val chosen = chooseHerdrShortcuts(shortcuts, changedAt, manager.maxShortcutCountPerActivity - (existing.size - ours.size))
-            val chosenIds = chosen.map { it.id }.toSet()
-            val gone = ours.keys - chosenIds
+            observed.keys.retainAll(snapshot.panes.map { it.terminalId }.toSet())
+            val chosen = chooseHerdrShortcuts(shortcuts, now, manager.maxShortcutCountPerActivity - (existing.size - ours.size))
+            val labels = herdrShortcutLabels(chosen)
+            val gone = ours.keys - chosen.map { it.id }.toSet()
             if (gone.isNotEmpty()) manager.removeDynamicShortcuts(gone.toList())
             val infos = chosen.mapIndexedNotNull { rank, shortcut ->
-                if (shortcut.id in ours && shortcut.id !in changed) null else shortcut to info(shortcut, rank)
+                val label = labels.getValue(shortcut.id)
+                val shown = ours[shortcut.id]
+                val same = shown != null && shown.shortLabel?.toString() == label &&
+                    shown.longLabel?.toString() == longLabel(shortcut) && shown.rank == rank &&
+                    shown.extras?.getLong(EXTRA_TIME, -1L) == shortcut.since &&
+                    shown.extras?.getBoolean(EXTRA_ACTIVE, false) == shortcut.active
+                if (same) null else shortcut to info(shortcut, label, rank)
             }
             val added = infos.filter { (shortcut, _) -> shortcut.id !in ours }.map { it.second }
             val updated = infos.filter { (shortcut, _) -> shortcut.id in ours }.map { it.second }
@@ -62,26 +76,38 @@ class HerdrShortcutPublisher(
         HerdrAgentStatus.Blocked -> context.getString(R.string.herdr_shortcut_blocked)
         HerdrAgentStatus.Done -> context.getString(R.string.herdr_shortcut_done)
         HerdrAgentStatus.Idle -> context.getString(R.string.herdr_shortcut_idle)
-        else -> shortcut.folder.ifEmpty { shortcut.shortLabel }
+        else -> shortcut.folder.ifEmpty { shortcut.title }
     }
 
-    private fun info(shortcut: HerdrPaneShortcut, rank: Int): ShortcutInfo {
+    private fun info(shortcut: HerdrPaneShortcut, label: String, rank: Int): ShortcutInfo {
         val intent = Intent(context, MainActivity::class.java)
             .setAction(ACTION_OPEN_HERDR_TERMINAL)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         NotificationDestinationCodec.encode(NotificationDestination.HerdrPane(serverId, socketPath, shortcut.terminalId))
             .forEach { (key, value) -> intent.putExtra(key, value) }
         return ShortcutInfo.Builder(context, shortcut.id)
-            .setShortLabel(shortcut.shortLabel)
+            .setShortLabel(label)
             .setLongLabel(longLabel(shortcut))
             .setIcon(Icon.createWithResource(context, if (shortcut.isClaude) R.drawable.ic_shortcut_claude else R.drawable.ic_shortcut_terminal))
             .setIntent(intent)
             .setRank(rank)
+            .setExtras(
+                PersistableBundle().apply {
+                    putLong(EXTRA_TIME, shortcut.since)
+                    putBoolean(EXTRA_ACTIVE, shortcut.active)
+                },
+            )
             .build()
     }
 
     companion object {
         private const val TAG = "HerdrShortcuts"
         const val ACTION_OPEN_HERDR_TERMINAL = "com.mrndtvndv.term.OPEN_HERDR_TERMINAL"
+
+        /** When the pane's agent last changed state, wall-clock millis (0 when unknown), for Keyarchy's order. */
+        const val EXTRA_TIME = "org.ferrao.homekey.time"
+
+        /** True while the pane's agent works or waits for input: as recent as now. */
+        const val EXTRA_ACTIVE = "org.ferrao.homekey.active"
     }
 }

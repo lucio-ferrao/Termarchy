@@ -53,6 +53,14 @@ class HerdrWireTest {
     }
 
     @Test
+    fun `reads when the agent's state changed and treats its absence as unknown`() {
+        val snapshot = HerdrWire.decodeSnapshot(snapshotResult("r1"))
+
+        assertEquals(null, snapshot.panes.first().agentStatusSince)
+        assertEquals(1794225000000L, snapshot.panes.last().agentStatusSince)
+    }
+
+    @Test
     fun `maps unknown agent states to Unknown instead of failing`() {
         val snapshot = HerdrWire.decodeSnapshot(snapshotResult("r1"))
 
