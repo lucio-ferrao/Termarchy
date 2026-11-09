@@ -5,12 +5,6 @@ import android.graphics.Typeface
 import android.graphics.text.TextRunShaper
 import android.os.Build
 
-/**
- * OpenType features every cell is drawn with, as in Ghostty's `font-feature`: slashed zero, single-storey a and the
- * code ligatures of Paper Mono. Fonts without them ignore them.
- */
-internal const val TerminalFontFeatures = "'zero', 'ss01'"
-
 /** Marks a cell that cannot join a contextual run. */
 internal const val NoRun = -1
 
@@ -21,7 +15,7 @@ internal fun cellTypeface(typeface: Typeface?, bold: Boolean): Typeface {
 }
 
 /**
- * The runs of neighbouring cells shaped together, so contextual alternates (Paper Mono's ligatures: `->`, `!=`, `===`)
+ * The runs of neighbouring cells shaped together, so contextual alternates (JetBrains Mono's ligatures: `->`, `!=`, `===`)
  * see their neighbours. [faces] holds each cell's face (0 regular, 1 bold), or [NoRun] where the cell cannot join a
  * run; a run also ends where the face changes. Single cells have no context and are left out.
  */

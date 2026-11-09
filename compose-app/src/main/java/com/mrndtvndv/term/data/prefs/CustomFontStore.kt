@@ -34,7 +34,7 @@ class CustomFontStore(private val context: Context) {
     }
 
     /**
-     * The terminal's typeface: the imported font, or Paper Mono (regular and bold, as in the Ghostty config), then Noto
+     * The terminal's typeface: the imported font, or JetBrains Mono (regular and bold, Ghostty's default), then Noto
      * Sans Symbols 2 for the symbols those lack (e.g. ⏵ U+23F5 in Claude Code's status line), then the Nerd Font icons
      * (eza --icons), then the system fonts. The first font keeps setting the cell metrics. Before Android 10 there is no
      * symbols fallback.
@@ -45,8 +45,8 @@ class CustomFontStore(private val context: Context) {
             val primary = if (file.isFile && file.length() > 0L) {
                 FontFamily.Builder(Font.Builder(file).build()).build()
             } else {
-                FontFamily.Builder(Font.Builder(context.assets, PAPER_MONO).build())
-                    .addFont(Font.Builder(context.assets, PAPER_MONO_BOLD).build())
+                FontFamily.Builder(Font.Builder(context.assets, JETBRAINS_MONO).build())
+                    .addFont(Font.Builder(context.assets, JETBRAINS_MONO_BOLD).build())
                     .build()
             }
             Typeface.CustomFallbackBuilder(primary)
@@ -60,13 +60,13 @@ class CustomFontStore(private val context: Context) {
         }
     }
 
-    private fun loadPrimaryTypeface(): Typeface = loadTypeface() ?: Typeface.createFromAsset(context.assets, PAPER_MONO)
+    private fun loadPrimaryTypeface(): Typeface = loadTypeface() ?: Typeface.createFromAsset(context.assets, JETBRAINS_MONO)
 
     private companion object {
         const val TAG = "CustomFontStore"
-        /** Paper Mono (paper-design/paper-mono, OFL), the font of the Ghostty config on the PC. */
-        const val PAPER_MONO = "fonts/PaperMono-Regular.otf"
-        const val PAPER_MONO_BOLD = "fonts/PaperMono-Bold.otf"
+        /** JetBrains Mono (JetBrains/JetBrainsMono 2.304, OFL), Ghostty's default font, as on the PC. */
+        const val JETBRAINS_MONO = "fonts/JetBrainsMono-Regular.ttf"
+        const val JETBRAINS_MONO_BOLD = "fonts/JetBrainsMono-Bold.ttf"
         const val SYMBOLS_FONT = "fonts/NotoSansSymbols2-Regular.ttf"
         /** The icons of the Nerd Fonts (file types, git, folders), drawn by eza --icons, starship, lazygit… */
         const val NERD_SYMBOLS_FONT = "fonts/SymbolsNerdFontMono-Regular.ttf"

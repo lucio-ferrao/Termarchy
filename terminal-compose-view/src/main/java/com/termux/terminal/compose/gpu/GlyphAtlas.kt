@@ -361,7 +361,7 @@ internal fun glyphRasterGeometry(
     )
 }
 
-/** How many cells a contextual glyph may reach past its own, each side: Paper Mono's `<!--` reaches back three. */
+/** How many cells a contextual glyph may reach past its own, each side: a ligature like `<!--` reaches back three. */
 private const val ContextualReachCells = 4
 
 /**
@@ -403,7 +403,6 @@ internal class AndroidGlyphRasterizer {
         paint.reset()
         paint.flags = Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG
         paint.typeface = cellTypeface(key.typeface, key.bold)
-        paint.fontFeatureSettings = TerminalFontFeatures
         paint.textSize = key.fontSizePx
         val maskRequested = key.rasterMode == GlyphAtlasKey.RASTER_MODE_MASK
         paint.color = if (maskRequested) 0xFFFFFFFF.toInt() else key.foregroundArgb

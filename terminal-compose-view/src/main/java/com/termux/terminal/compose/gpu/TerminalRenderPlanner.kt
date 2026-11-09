@@ -469,7 +469,6 @@ internal class TerminalRenderPlanner(
         shapePaint.reset()
         shapePaint.flags = Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG
         shapePaint.textSize = snapshot.visual.fontSizePx
-        shapePaint.fontFeatureSettings = TerminalFontFeatures
         runs.forEach { run ->
             shapePaint.typeface = cellTypeface(snapshot.visual.typeface, faces[run.first] == 1)
             val count = run.last - run.first + 1
@@ -576,7 +575,6 @@ internal class TerminalRenderPlanner(
         measurePaint.reset()
         measurePaint.flags = Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG
         measurePaint.typeface = cellTypeface(visual.typeface, isBold(effect))
-        measurePaint.fontFeatureSettings = TerminalFontFeatures
         measurePaint.textSize = visual.fontSizePx
         measurePaint.textScaleX = metrics.textScaleX
         measurePaint.textSkewX = if (effect and TextStyle.CHARACTER_ATTRIBUTE_ITALIC != 0) {
