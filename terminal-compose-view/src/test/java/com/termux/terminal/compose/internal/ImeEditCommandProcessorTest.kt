@@ -392,6 +392,24 @@ class ImeEditCommandProcessorTest {
         assertEquals("the.b", field.text.toString())
     }
 
+    // Backspace right after an autocorrection on space reverts it (HeliBoard's revertCommit): it deletes the
+    // corrected word with its space, more than the space alone the processor last inserted, then commits the
+    // typed word. The whole correction must go, not only the space.
+    @Test
+    fun revertingAnAutocorrectionDeletesTheCorrectedWordAndItsSpace() {
+        val field = TextBufferTerminal()
+        val ime = ImeEditCommandProcessor(field)
+        ime.process(listOf(SetComposingTextCommand("teh", 1)))
+        ime.process(listOf(CommitTextCommand("the", 1)))
+        ime.process(listOf(CommitTextCommand(" ", 1)))
+        assertEquals("the ", field.text.toString())
+
+        ime.process(listOf(DeleteSurroundingTextCommand(4, 0)))
+        ime.process(listOf(CommitTextCommand("teh", 1)))
+
+        assertEquals("teh", field.text.toString())
+    }
+
     // Known gap: DeleteSurroundingText drops the processor's knowledge of the text it removed,
     // so a region that replaces it has no tracked word to match and is still appended.
     @Ignore("Known gap: a region over text dropped by DeleteSurroundingText is still appended")

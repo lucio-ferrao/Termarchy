@@ -600,30 +600,31 @@ internal class ImeEditCommandProcessor(
         else -> null
     }
 
+    /**
+     * The code points in the [length] UTF-16 units before the cursor: counted in the known region, and one per unit
+     * for any part before it, which the processor never saw (a revert of an autocorrection deletes the corrected
+     * word with its space, while only the space may be known).
+     */
     private fun codePointCountBeforeCursor(length: Int): Int {
         val region = knownCursorRegion() ?: return length
         val (regionStart, regionText) = region
         val end = imeCursorPosition
-        val start = (end - length).coerceAtLeast(regionStart)
-        val regionEnd = regionStart + regionText.length
-        return if (start in regionStart..regionEnd && end in regionStart..regionEnd) {
-            regionText.codePointCount(start - regionStart, end - regionStart)
-        } else {
-            length
-        }
+        if (end !in regionStart..regionStart + regionText.length) return length
+        val start = end - length
+        return regionText.codePointCount((start - regionStart).coerceAtLeast(0), end - regionStart) +
+            (regionStart - start).coerceAtLeast(0)
     }
 
+    /** As [codePointCountBeforeCursor], after the cursor: one per unit for any part past the known region. */
     private fun codePointCountAfterCursor(length: Int): Int {
         val region = knownCursorRegion() ?: return length
         val (regionStart, regionText) = region
         val start = imeCursorPosition
-        val end = (start + length).coerceAtMost(regionStart + regionText.length)
         val regionEnd = regionStart + regionText.length
-        return if (start in regionStart..regionEnd && end in regionStart..regionEnd) {
-            regionText.codePointCount(start - regionStart, end - regionStart)
-        } else {
-            length
-        }
+        if (start !in regionStart..regionEnd) return length
+        val end = start + length
+        return regionText.codePointCount(start - regionStart, end.coerceAtMost(regionEnd) - regionStart) +
+            (end - regionEnd).coerceAtLeast(0)
     }
     /** True when the text is a punctuation-only continuation ("." after "foo" → "foo."). */
     private fun String.isPunctuationOnly(): Boolean =
