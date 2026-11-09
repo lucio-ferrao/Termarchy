@@ -3,7 +3,7 @@ package com.mrndtvndv.term.ui.keyboard
 import androidx.compose.ui.graphics.Color
 
 /**
- * The colors of the keyboard under the key bar, so the bar reads as one more row of it. They are those of the Homekey
+ * The colors of the keyboard under the key bar, so the bar reads as one more row of it. They are those of the Keyarchy
  * keyboard (a HeliBoard fork) in the theme it uses, HeliBoard's night default KeyboardTheme.THEME_DARK ("dark",
  * Material style, no key borders): fixed here, since Ecto cannot read the keyboard's theme.
  */

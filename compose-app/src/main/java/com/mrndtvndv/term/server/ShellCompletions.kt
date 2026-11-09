@@ -5,7 +5,7 @@ import com.mrndtvndv.term.workspace.shellQuote
 import kotlinx.coroutines.CancellationException
 
 /**
- * What Homekey completes in a shell, as `EditorInfo.extras` string arrays: the commands of the remote bash (for the
+ * What Keyarchy completes in a shell, as `EditorInfo.extras` string arrays: the commands of the remote bash (for the
  * first word of a line) and the entries of the pane's folder, folders ending in `/` (for the words after it).
  */
 const val IME_COMMANDS_KEY = "org.ferrao.homekey.commands"

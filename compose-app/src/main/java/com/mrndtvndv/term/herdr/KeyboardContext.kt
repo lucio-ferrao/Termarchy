@@ -2,7 +2,7 @@ package com.mrndtvndv.term.herdr
 
 /**
  * What the keyboard is told about the program a terminal runs, through `EditorInfo.privateImeOptions`, so it can adapt
- * (Homekey writes prose for an agent, completes commands without corrections in a shell, and stays out of the way of a
+ * (Keyarchy writes prose for an agent, completes commands without corrections in a shell, and stays out of the way of a
  * full-screen program).
  */
 data class KeyboardContext(val kind: Kind, val program: String) {
