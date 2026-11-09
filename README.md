@@ -61,10 +61,20 @@ A vibe coding companion for Android — an SSH client with Herdr integration and
 - **Git review tab** — Review, stage, and commit changes, edit commit messages, and reset to commits from the app.
 - **SFTP tab** — Browse and transfer files on the connected server, synced to the active workspace's directory.
 - **Cursor effects** — Warp, Sweep, and Tail cursor trails (adapted from ghostty-cursor-shaders).
-- **Local terminal sessions** — Drop into a local shell when you don't need SSH.
+- **Local terminal sessions** — Drop into a local shell when you don't need SSH; off by default, turned on in the settings.
 - **Split & tabbed workspaces** — Multiple terminals per workspace.
 - **Material You theming** — Dynamic wallpaper-derived colors.
-- **Extra keys toolbar** — Configurable extra keys row above the soft keyboard.
+
+### This fork
+
+[lucio-ferrao/termux-ghostty](https://github.com/lucio-ferrao/termux-ghostty) (branch `dev`) adds to Ecto:
+
+- **Keys that never leave the phone** — SSH authenticates only with an ECDSA P-256 key made in the Android Keystore (StrongBox where there is one), not exportable, each use confirmed with the fingerprint; no passwords. The server's host key is shown (SHA-256) and confirmed on the first connection, and a changed one is refused before anything is sent. App data is not backed up.
+- **Herdr** — Each herdr pane is a dynamic shortcut while the server is connected (its title, the agent's state, opening Ecto on that pane), so a launcher like [Keyarchy](https://github.com/lucio-ferrao/Keyarchy) lists them. Agent states use herdr's colors (Catppuccin), in the agents list and on the button's dot. The full-UI tab follows herdr's focused pane. No notification when an agent finishes, only when one needs attention. `~/.local/bin` is in the PATH of remote commands, where herdr is usually installed.
+- **The keyboard knows what runs** — Each tab tells the keyboard, in `EditorInfo.privateImeOptions` (`org.ferrao.homekey.context=agent:claude`, `shell:bash`, `fullscreen:vim`), so [Keyarchy](https://github.com/lucio-ferrao/Keyarchy) types prose for an agent and commands for a shell. When the program reads a password (herdr's `input_mode`, from the [herdr fork](https://github.com/lucio-ferrao/herdr/tree/password-input)), the field becomes a password field: nothing suggested or learned. In a shell, the server's commands (`compgen -c`) and the files and folders of the pane's folder go to the keyboard in `EditorInfo.extras`, for its suggestions.
+- **Key bar as a keyboard row** — Full width and as tall as Keyarchy's suggestion strip, in its dark colors, with the tabs button (Ecto's ghost) on the left, aligned with Keyarchy's key. The keyboard opens whenever you come back to a terminal.
+- **JetBrains Mono** — The default font, regular and bold, as in Ghostty, with its ligatures (neighbouring cells are shaped together and drawn by glyph). Noto Sans Symbols 2 and Symbols Nerd Font Mono fill in symbols and icons (`eza --icons`). An imported font still wins.
+- **One server, shorter titles** — With a single saved server, pane, tab and shortcut titles drop the `user@host:`.
 
 ## Status
 
