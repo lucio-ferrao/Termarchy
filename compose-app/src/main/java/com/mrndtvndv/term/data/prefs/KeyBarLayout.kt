@@ -88,15 +88,15 @@ data class KeyBarItem(
 data class KeyBarLayout(val items: List<KeyBarItem>)
 
 /**
- * The bar users get when no layout is saved: Esc, Ctrl, Alt, Tab, then the Git and SFTP icons,
+ * The bar users get when no layout is saved: Esc, Tab, Ctrl, Alt, then the Git and SFTP icons,
  * which only the Herdr route shows.
  */
 fun defaultKeyBarLayout(): KeyBarLayout = KeyBarLayout(
     listOf(
         KeyBarItem(id = "esc", label = "Esc", tap = KeyBarAction.Key(KeyEvent.KEYCODE_ESCAPE)),
+        KeyBarItem(id = "tab", label = "Tab", tap = KeyBarAction.Key(KeyEvent.KEYCODE_TAB)),
         KeyBarItem(id = "ctrl", label = "Ctrl", tap = KeyBarAction.Ctrl),
         KeyBarItem(id = "alt", label = "Alt", tap = KeyBarAction.Alt),
-        KeyBarItem(id = "tab", label = "Tab", tap = KeyBarAction.Key(KeyEvent.KEYCODE_TAB)),
         hostIconItem(KeyBarHostAction.Git),
         hostIconItem(KeyBarHostAction.Sftp),
     ),
