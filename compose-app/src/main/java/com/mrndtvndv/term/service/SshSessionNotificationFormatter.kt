@@ -6,6 +6,8 @@ internal object SshSessionNotificationFormatter {
         sshConnectionCount: Int,
         localCount: Int,
         wakeLockHeld: Boolean,
+        /** Labels of the active port forwards ("L3000"), listed after the connections. */
+        forwards: List<String> = emptyList(),
     ): Pair<String, String> {
         if (sshConnectionCount + localCount == 0) {
             val title = if (wakeLockHeld) "Wake Lock Active" else "Terminal Service"
@@ -36,7 +38,8 @@ internal object SshSessionNotificationFormatter {
             else -> "Maintaining active local terminal session"
         }
 
-        val text = if (wakeLockHeld) "$baseText (wake lock held)" else baseText
+        val withForwards = if (forwards.isEmpty()) baseText else "$baseText · forwarding ${forwards.joinToString(", ")}"
+        val text = if (wakeLockHeld) "$withForwards (wake lock held)" else withForwards
         return Pair(title, text)
     }
 }

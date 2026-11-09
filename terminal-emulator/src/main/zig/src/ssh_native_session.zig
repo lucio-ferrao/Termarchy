@@ -266,7 +266,10 @@ pub const SshNativeSession = struct {
 
         owner: *SshNativeSession,
         allocator: std.mem.Allocator,
+        // The remote Unix socket, or the host of a TCP target when `tcp_port` is set.
         path: [:0]u8,
+        // A TCP port opens a direct-tcpip channel to `path`:`tcp_port` (ssh -L); -1 a Unix socket.
+        tcp_port: c_int = -1,
         mutex: Mutex = .{},
         changed: Cond = .{},
         // Guarded by `mutex`.
@@ -289,7 +292,7 @@ pub const SshNativeSession = struct {
         // Loop thread only. Non-null from the moment the open succeeds until retire.
         channel: ?*c.LIBSSH2_CHANNEL = null,
 
-        fn create(owner: *SshNativeSession, socket_path: []const u8) !*StreamChannel {
+        fn create(owner: *SshNativeSession, socket_path: []const u8, tcp_port: c_int) !*StreamChannel {
             const allocator = owner.allocator;
             const path = try allocator.dupeSentinel(u8, socket_path, 0);
             errdefer allocator.free(path);
@@ -302,6 +305,7 @@ pub const SshNativeSession = struct {
                 .owner = owner,
                 .allocator = allocator,
                 .path = path,
+                .tcp_port = tcp_port,
                 .inbound = inbound,
                 .outbound = outbound,
             };
@@ -522,16 +526,198 @@ pub const SshNativeSession = struct {
         }
     };
 
+    /// A remote port forward (ssh -R): the server listens on `host`:`port`, and each connection to it
+    /// arrives as a channel that becomes an open StreamChannel, which the JVM takes with `accept` and
+    /// joins to its local target. Lifetime as a StreamChannel's: the loop retires it, the JVM releases it.
+    pub const Listener = struct {
+        owner: *SshNativeSession,
+        allocator: std.mem.Allocator,
+        host: [:0]u8,
+        port: c_int,
+        mutex: Mutex = .{},
+        changed: Cond = .{},
+        // Guarded by `mutex`.
+        phase: StreamChannel.Phase = .pending,
+        failure: StreamChannel.Failure = .none,
+        detail: [StreamChannel.detail_capacity]u8 = undefined,
+        detail_len: usize = 0,
+        bound_port: c_int = 0,
+        // Accepted streams the JVM has not taken yet. Untaken ones are closed with the listener.
+        accepted: std.ArrayList(*StreamChannel) = .empty,
+        close_requested: bool = false,
+        retired: bool = false,
+        released: bool = false,
+        // Loop thread only. Non-null from the moment the listen succeeds until retire.
+        listener: ?*c.LIBSSH2_LISTENER = null,
+
+        fn create(owner: *SshNativeSession, host: []const u8, port: c_int) !*Listener {
+            const allocator = owner.allocator;
+            const owned_host = try allocator.dupeSentinel(u8, host, 0);
+            errdefer allocator.free(owned_host);
+            const listener = try allocator.create(Listener);
+            listener.* = .{ .owner = owner, .allocator = allocator, .host = owned_host, .port = port };
+            listener.changed.init();
+            return listener;
+        }
+
+        fn destroy(self: *Listener) void {
+            self.changed.deinit();
+            self.accepted.deinit(queue_allocator);
+            self.allocator.free(self.host);
+            self.allocator.destroy(self);
+        }
+
+        fn currentPhase(self: *Listener) StreamChannel.Phase {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            return self.phase;
+        }
+
+        fn isCloseRequested(self: *Listener) bool {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            return self.close_requested;
+        }
+
+        /// Loop thread: publishes a phase and wakes waiters.
+        fn setPhase(self: *Listener, phase: StreamChannel.Phase, failure: StreamChannel.Failure, detail: []const u8) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            self.phase = phase;
+            self.failure = failure;
+            const length = @min(detail.len, StreamChannel.detail_capacity);
+            @memcpy(self.detail[0..length], detail[0..length]);
+            self.detail_len = length;
+            self.changed.broadcast();
+        }
+
+        /// Loop thread: the server is listening, on `bound_port` when the request asked for port 0.
+        fn opened(self: *Listener, bound_port: c_int) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            self.bound_port = if (bound_port > 0) bound_port else self.port;
+            self.phase = .open;
+            self.changed.broadcast();
+        }
+
+        /// Waits up to `timeout_ms` for the listen to finish. Returns 1 when listening, 0 while
+        /// still asking, -1 when closed, and -2 when the server refused it.
+        pub fn awaitOpen(self: *Listener, timeout_ms: c_int) c_int {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            if (self.close_requested) return -1;
+            if (self.phase == .pending or self.phase == .opening) self.changed.timedWait(&self.mutex, timeout_ms);
+            if (self.close_requested) return -1;
+            return switch (self.phase) {
+                .open => 1,
+                .failed => -2,
+                .pending, .opening => 0,
+            };
+        }
+
+        pub fn boundPort(self: *Listener) c_int {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            return self.bound_port;
+        }
+
+        /// Takes the next connection, waiting up to `timeout_ms`: the stream's address (the JVM then
+        /// owns it, as one from openStreamLocal), 0 when none came in time, -1 after close, -2 when
+        /// the listener failed.
+        pub fn accept(self: *Listener, timeout_ms: c_int) i64 {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            if (self.close_requested) return -1;
+            if (self.accepted.items.len == 0 and self.phase != .failed) self.changed.timedWait(&self.mutex, timeout_ms);
+            if (self.close_requested) return -1;
+            if (self.accepted.items.len > 0) return @intCast(@intFromPtr(self.accepted.orderedRemove(0)));
+            if (self.phase == .failed) return -2;
+            return 0;
+        }
+
+        /// Loop thread: a new connection is ready for the JVM.
+        fn pushAccepted(self: *Listener, stream: *StreamChannel) void {
+            self.mutex.lock();
+            self.accepted.append(queue_allocator, stream) catch {
+                self.mutex.unlock();
+                stream.close();
+                stream.release();
+                return;
+            };
+            self.changed.broadcast();
+            self.mutex.unlock();
+        }
+
+        /// Asks the loop to cancel the forward. Never waits on the loop.
+        pub fn close(self: *Listener) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            if (self.close_requested) return;
+            self.close_requested = true;
+            self.changed.broadcast();
+            if (!self.retired) self.owner.signalCommandWake();
+        }
+
+        /// JVM is done with the handle. Call only after `close`, with no call in flight.
+        pub fn release(self: *Listener) void {
+            self.mutex.lock();
+            self.released = true;
+            const free_now = self.retired;
+            self.mutex.unlock();
+            if (free_now) self.destroy();
+        }
+
+        pub fn failureCode(self: *Listener) c_int {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            return @intFromEnum(self.failure);
+        }
+
+        pub fn copyDetail(self: *Listener, out: *[StreamChannel.detail_capacity + 1]u8) usize {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            @memcpy(out[0..self.detail_len], self.detail[0..self.detail_len]);
+            out[self.detail_len] = 0;
+            return self.detail_len;
+        }
+
+        /// Loop thread, or deinit after the loop has exited: cancels the forward, closes the
+        /// connections nobody took, and frees the memory once the JVM has released it too.
+        fn retire(self: *Listener) void {
+            if (self.listener) |handle| {
+                // A cancel that would wait is dropped: session_free reclaims the listener.
+                _ = c.libssh2_channel_forward_cancel(handle);
+                self.listener = null;
+            }
+            self.mutex.lock();
+            var untaken = self.accepted;
+            self.accepted = .empty;
+            self.close_requested = true;
+            self.retired = true;
+            self.changed.broadcast();
+            const free_now = self.released;
+            self.mutex.unlock();
+            for (untaken.items) |stream| {
+                stream.close();
+                stream.release();
+            }
+            untaken.deinit(queue_allocator);
+            if (free_now) self.destroy();
+        }
+    };
+
     /// One channel open waiting for, or holding, the open slot.
     const OpenJob = union(enum) {
         stream: *StreamChannel,
         op: *ChannelOp,
+        listener: *Listener,
 
         /// The JVM has cancelled this open, so it need not run.
         fn isDead(job: OpenJob) bool {
             return switch (job) {
                 .stream => |stream| stream.isCloseRequested(),
                 .op => |op| op.isAbandoned(),
+                .listener => |listener| listener.isCloseRequested(),
             };
         }
     };
@@ -770,11 +956,12 @@ pub const SshNativeSession = struct {
     sftp_staging_armed: bool = false,
     sftp_staging_eof: bool = false,
     sftp_staging_error: bool = false,
-    // Guards `streams`, `ops`, and `open_queue`. Lock order: streams_lock before a
+    // Guards `streams`, `ops`, `listeners`, and `open_queue`. Lock order: streams_lock before a
     // stream's or operation's mutex.
     streams_lock: Mutex = .{},
     streams: std.ArrayList(*StreamChannel) = .empty,
     ops: std.ArrayList(*ChannelOp) = .empty,
+    listeners: std.ArrayList(*Listener) = .empty,
     // Channel opens waiting for the slot, FIFO.
     open_queue: ssh_open_queue.OpenQueue(OpenJob) = .{},
     // Loop thread only: the one job whose libssh2 channel open is in flight. libssh2
@@ -1063,10 +1250,13 @@ pub const SshNativeSession = struct {
         // The loop is gone. Streams still linked must stop touching this session
         // before the wake pipe closes and the struct is freed.
         self.failStreams();
+        self.failListeners();
         self.failOps();
+        self.retireListeners();
         self.retireStreams();
         self.streams.deinit(queue_allocator);
         self.ops.deinit(queue_allocator);
+        self.listeners.deinit(queue_allocator);
         self.open_queue.deinit(queue_allocator);
 
         _ = c.close(self.wake_pipe[0]);
@@ -1150,8 +1340,48 @@ pub const SshNativeSession = struct {
     /// Callers poll `StreamChannel.awaitOpen` for the result.
     pub fn openStreamLocal(self: *SshNativeSession, socket_path: []const u8) StartError!*StreamChannel {
         if (!isValidStreamPath(socket_path)) return error.InvalidPath;
-        const stream = try StreamChannel.create(self, socket_path);
+        return self.admitStream(try StreamChannel.create(self, socket_path, -1));
+    }
 
+    /// A direct-tcpip channel to `host`:`port` as the server sees them (ssh -L).
+    pub fn openDirectTcpip(self: *SshNativeSession, host: []const u8, port: c_int) StartError!*StreamChannel {
+        if (!isValidForwardHost(host) or port <= 0 or port > 65535) return error.InvalidPath;
+        return self.admitStream(try StreamChannel.create(self, host, port));
+    }
+
+    /// Asks the server to listen on `host`:`port` (ssh -R); 0 lets it choose. Poll `Listener.awaitOpen`.
+    pub fn openRemoteForward(self: *SshNativeSession, host: []const u8, port: c_int) StartError!*Listener {
+        if (!isValidForwardHost(host) or port < 0 or port > 65535) return error.InvalidPath;
+        const listener = try Listener.create(self, host, port);
+
+        self.streams_lock.lock();
+        defer self.streams_lock.unlock();
+        if (!self.running.load(.acquire)) {
+            listener.destroy();
+            return error.NotRunning;
+        }
+        if (self.listeners.items.len >= max_live_streams) {
+            listener.destroy();
+            return error.TooManyPending;
+        }
+        self.listeners.append(queue_allocator, listener) catch {
+            listener.destroy();
+            return error.OutOfMemory;
+        };
+        self.open_queue.admit(queue_allocator, .{ .listener = listener }, max_queued_opens) catch |err| {
+            _ = self.listeners.pop();
+            listener.destroy();
+            return err;
+        };
+        self.signalCommandWake();
+        return listener;
+    }
+
+    fn isValidForwardHost(host: []const u8) bool {
+        return host.len > 0 and host.len <= 255 and std.mem.indexOfScalar(u8, host, 0) == null;
+    }
+
+    fn admitStream(self: *SshNativeSession, stream: *StreamChannel) StartError!*StreamChannel {
         self.streams_lock.lock();
         defer self.streams_lock.unlock();
         if (!self.running.load(.acquire)) {
@@ -1267,7 +1497,10 @@ pub const SshNativeSession = struct {
     }
 
     fn driveOpen(self: *SshNativeSession, stream: *StreamChannel) void {
-        const channel = c.libssh2_channel_direct_streamlocal_ex(self.session, stream.path.ptr, "", 0);
+        const channel = if (stream.tcp_port >= 0)
+            c.libssh2_channel_direct_tcpip_ex(self.session, stream.path.ptr, stream.tcp_port, "127.0.0.1", 0)
+        else
+            c.libssh2_channel_direct_streamlocal_ex(self.session, stream.path.ptr, "", 0);
         if (channel) |value| {
             stream.channel = value;
             self.open_slot = null;
@@ -1282,6 +1515,115 @@ pub const SshNativeSession = struct {
             classifyStreamFailure(error_detail.code, error_detail.message),
             error_detail.message,
         );
+    }
+
+    /// The slot holder's tcpip-forward request (ssh -R), driven to completion like an open.
+    fn driveListen(self: *SshNativeSession, listener: *Listener) void {
+        var bound_port: c_int = 0;
+        const handle = c.libssh2_channel_forward_listen_ex(self.session, listener.host.ptr, listener.port, &bound_port, 16);
+        if (handle) |value| {
+            listener.listener = value;
+            self.open_slot = null;
+            listener.opened(bound_port);
+            return;
+        }
+        const error_detail = self.lastSessionError();
+        if (error_detail.code == c.LIBSSH2_ERROR_EAGAIN) return;
+        self.open_slot = null;
+        const failure: StreamChannel.Failure = if (error_detail.code == c.LIBSSH2_ERROR_REQUEST_DENIED)
+            .denied
+        else
+            classifyStreamFailure(error_detail.code, error_detail.message);
+        listener.setPhase(.failed, failure, error_detail.message);
+    }
+
+    /// Accepts the connections of every listening forward and retires closed ones. Loop thread only.
+    fn processListeners(self: *SshNativeSession) void {
+        self.streams_lock.lock();
+        defer self.streams_lock.unlock();
+        var index: usize = 0;
+        while (index < self.listeners.items.len) {
+            const listener = self.listeners.items[index];
+            if (!self.serviceListener(listener)) {
+                index += 1;
+                continue;
+            }
+            _ = self.listeners.orderedRemove(index);
+            listener.retire();
+        }
+    }
+
+    /// Returns true once the listener is closed and must be unlinked. Caller holds streams_lock.
+    fn serviceListener(self: *SshNativeSession, listener: *Listener) bool {
+        switch (listener.currentPhase()) {
+            .pending => {
+                if (!listener.isCloseRequested()) return false;
+                self.dequeueOpen(.{ .listener = listener });
+                return true;
+            },
+            .opening => return false,
+            .failed => return listener.isCloseRequested(),
+            .open => {
+                const handle = listener.listener orelse return true;
+                if (listener.isCloseRequested()) {
+                    if (c.libssh2_channel_forward_cancel(handle) == c.LIBSSH2_ERROR_EAGAIN) return false;
+                    listener.listener = null;
+                    return true;
+                }
+                while (self.streams.items.len < max_live_streams) {
+                    const channel = c.libssh2_channel_forward_accept(handle) orelse {
+                        const error_detail = self.lastSessionError();
+                        if (error_detail.code != c.LIBSSH2_ERROR_EAGAIN) {
+                            listener.setPhase(.failed, classifyStreamFailure(error_detail.code, error_detail.message), error_detail.message);
+                        }
+                        return false;
+                    };
+                    const stream = StreamChannel.create(self, listener.host, listener.port) catch {
+                        self.releaseChannel(channel);
+                        return false;
+                    };
+                    stream.channel = channel;
+                    stream.setPhase(.open, .none, "");
+                    self.streams.append(queue_allocator, stream) catch {
+                        stream.channel = null;
+                        self.releaseChannel(channel);
+                        stream.destroy();
+                        return false;
+                    };
+                    listener.pushAccepted(stream);
+                    self.more_work = true;
+                }
+                return false;
+            },
+        }
+    }
+
+    /// Before session_free: every listener stops touching libssh2 and fails with the session's reason.
+    pub fn failListeners(self: *SshNativeSession) void {
+        self.streams_lock.lock();
+        defer self.streams_lock.unlock();
+        for (self.listeners.items) |listener| {
+            listener.listener = null;
+            listener.mutex.lock();
+            if (listener.phase != .failed) {
+                listener.phase = .failed;
+                listener.failure = .disconnected;
+                const length = @min(self.session_end_reason.len, StreamChannel.detail_capacity);
+                @memcpy(listener.detail[0..length], self.session_end_reason[0..length]);
+                listener.detail_len = length;
+            }
+            listener.changed.broadcast();
+            listener.mutex.unlock();
+        }
+    }
+
+    /// Only after the loop has exited, and before retireStreams: retires every listener, closing the
+    /// connections nobody took.
+    pub fn retireListeners(self: *SshNativeSession) void {
+        self.streams_lock.lock();
+        defer self.streams_lock.unlock();
+        for (self.listeners.items) |listener| listener.retire();
+        self.listeners.clearRetainingCapacity();
     }
 
     /// Moves bytes for an open stream: outbound first, because the peer is usually
@@ -1471,6 +1813,7 @@ pub const SshNativeSession = struct {
             switch (job) {
                 .stream => |stream| self.driveOpen(stream),
                 .op => |op| self.driveOpOpen(op),
+                .listener => |listener| self.driveListen(listener),
             }
             if (self.open_slot != null) return;
         }
@@ -1484,7 +1827,7 @@ pub const SshNativeSession = struct {
         const count = self.open_queue.pruneDead(&dead, OpenJob.isDead);
         for (dead[0..count]) |job| {
             switch (job) {
-                .stream => {},
+                .stream, .listener => {},
                 .op => |op| op.finished = true,
             }
         }
@@ -1520,6 +1863,11 @@ pub const SshNativeSession = struct {
                         continue;
                     }
                     op.stage = .opening;
+                    return job;
+                },
+                .listener => |listener| {
+                    if (listener.isCloseRequested()) continue;
+                    listener.setPhase(.opening, .none, "");
                     return job;
                 },
             }
@@ -1920,6 +2268,7 @@ pub const SshNativeSession = struct {
             // next step before the loop sleeps again.
             self.processOpenSlot();
             self.processStreams();
+            self.processListeners();
             self.processOps();
             self.processCommands();
             if (!self.running.load(.acquire)) break;
@@ -1978,6 +2327,7 @@ pub const SshNativeSession = struct {
         self.cancelQueuedCommands();
         // Before session_free takes the libssh2 channels with it.
         self.failStreams();
+        self.failListeners();
         self.failOps();
         // session_free releases the libssh2 channels; the ShellChannel structs
         // stay alive for the JVM until closeShell or deinit.

@@ -28,6 +28,8 @@ import com.mrndtvndv.term.clipboard.UploadController
 import com.mrndtvndv.term.clipboard.UploadTarget
 import com.mrndtvndv.term.navigation.AppRoute
 import com.mrndtvndv.term.server.AppSessionManager
+import com.mrndtvndv.term.server.SavedServersLoad
+import com.mrndtvndv.term.server.matchServer
 import com.mrndtvndv.term.server.SessionHost
 import com.mrndtvndv.term.ui.TermApp
 import com.mrndtvndv.term.ui.notification.NotificationDestination
@@ -120,6 +122,7 @@ class MainActivity : ComponentActivity(), SessionHost {
         }
 
         handleNotificationTap(intent)
+        handleConnect(intent)
     }
 
     /** Edge-to-edge with system bar icons matched to the configuration night mode. */
@@ -167,6 +170,7 @@ class MainActivity : ComponentActivity(), SessionHost {
         super.onNewIntent(intent)
         setIntent(intent)
         handleNotificationTap(intent)
+        handleConnect(intent)
     }
 
     private fun requestMissingPermissions() {
@@ -196,6 +200,29 @@ class MainActivity : ComponentActivity(), SessionHost {
         destination?.let(viewModel::openNotification)
     }
 
+    /**
+     * "ssh olivais" from Keyarchy, or a port forward waiting for its server: connects to the saved server by id, or by
+     * name or host ([matchServer]), and opens it. Connecting to a saved server is harmless, so any app may ask.
+     */
+    private fun handleConnect(intent: Intent?) {
+        if (intent?.action != ACTION_CONNECT) return
+        val id = intent.getStringExtra(EXTRA_SERVER_ID)
+        val name = intent.getStringExtra(EXTRA_SERVER)
+        // Consumed once, so a recreated activity does not connect again.
+        intent.action = null
+        intent.removeExtra(EXTRA_SERVER_ID)
+        intent.removeExtra(EXTRA_SERVER)
+        val serverId = id ?: name?.let { query ->
+            val saved = (sessionManager.serverRepository.load() as? SavedServersLoad.Loaded)?.servers.orEmpty()
+            matchServer(query, saved)?.id
+                ?: run {
+                    Toast.makeText(this, "No saved server matches \"$query\"", Toast.LENGTH_SHORT).show()
+                    null
+                }
+        }
+        serverId?.let(viewModel::connect)
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_DOWN) {
             // Only intercept when on a terminal screen: a workspace or a Herdr session
@@ -209,5 +236,12 @@ class MainActivity : ComponentActivity(), SessionHost {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    companion object {
+        /** Connect to a saved server and open it: [EXTRA_SERVER_ID], or [EXTRA_SERVER] with its name or host. */
+        const val ACTION_CONNECT = "com.mrndtvndv.term.action.CONNECT"
+        const val EXTRA_SERVER_ID = "com.mrndtvndv.term.extra.SERVER_ID"
+        const val EXTRA_SERVER = "com.mrndtvndv.term.extra.SERVER"
     }
 }

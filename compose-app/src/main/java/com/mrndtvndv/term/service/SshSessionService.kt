@@ -13,6 +13,13 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import com.mrndtvndv.term.server.ActivePortForwards
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import com.mrndtvndv.term.MainActivity
 import com.mrndtvndv.term.R
 import com.mrndtvndv.term.server.AppSessionManager
@@ -40,10 +47,14 @@ class SshSessionService : Service() {
         fun getService(): SshSessionService = this@SshSessionService
     }
 
+    // The notification lists the active port forwards: refreshed whenever they change.
+    private val forwardsScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         promoteToForeground()
+        forwardsScope.launch { ActivePortForwards.all.drop(1).collect { updateNotification() } }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -70,6 +81,7 @@ class SshSessionService : Service() {
     }
 
     override fun onDestroy() {
+        forwardsScope.cancel()
         releaseWakeLockInternal()
         sessions.values.forEach { it.finishIfRunning() }
         sessions.clear()
@@ -185,7 +197,8 @@ class SshSessionService : Service() {
             .size
         val localCount = activeSessions.count { it.sshShellHandle == 0L }
         val wakeLockHeld = wakeLock?.isHeld == true
-        return SshSessionNotificationFormatter.formatTitleAndText(sshConnectionCount, localCount, wakeLockHeld)
+        val forwards = ActivePortForwards.all.value.values.flatten().map { it.label }
+        return SshSessionNotificationFormatter.formatTitleAndText(sshConnectionCount, localCount, wakeLockHeld, forwards)
     }
 
     private fun buildNotification(): Notification {

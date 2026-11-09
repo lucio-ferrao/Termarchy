@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.mrndtvndv.term.domain.PortForward
 import com.mrndtvndv.term.herdr.KeyboardContext
 import com.mrndtvndv.term.data.prefs.AppSettings
 import com.mrndtvndv.term.data.prefs.KeyBarHostAction
@@ -123,6 +124,8 @@ fun TerminalPane(
     keyboardContext: KeyboardContext? = null,
     imeExtras: Map<String, List<String>> = emptyMap(),
     onLineSubmitted: () -> Unit = {},
+    forwards: List<PortForward> = emptyList(),
+    onStopForward: (PortForward) -> Unit = {},
 ) {
     val modifierKeys = remember { ModifierKeys() }
     val imeController = remember(session) { TerminalImeController() }
@@ -213,6 +216,8 @@ fun TerminalPane(
                 onProgramStatusOpened()
             },
             onHostAction = onHostAction,
+            forwards = forwards,
+            onStopForward = onStopForward,
             modifier = Modifier.align(Alignment.BottomCenter).keyBarLayout { coordinates ->
                 keyBarCoords = coordinates
                 updatePaneGeometry(canvasCoords, coordinates, pillCoords)

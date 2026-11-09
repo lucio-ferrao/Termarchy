@@ -33,6 +33,9 @@ class Server(
 ) {
     private val _terminals = MutableStateFlow<Map<String, TerminalEntry>>(emptyMap())
 
+    /** The port forwards of this SSH connection; null for local. */
+    val portForwards: PortForwards? = sshSession?.let { PortForwards(config.id, it) }
+
     /** Terminal per tab id. Mutated and read on the main thread only. */
     val terminals: StateFlow<Map<String, TerminalEntry>> = _terminals
 
@@ -93,6 +96,7 @@ class Server(
         disconnected = true
         herdr?.close()
         focusBridge?.close()
+        portForwards?.close()
         val actions = disconnectActions.toList()
         disconnectActions.clear()
         actions.forEach { runDisconnectAction(it) }

@@ -54,6 +54,7 @@ class NativeSshSession : SshSession {
     // Own lock: closing a stream runs on the main thread and must not wait behind a long exec under [lock].
     private val streamLock = Any()
     private val streams = mutableSetOf<NativeSshStreamChannel>()
+    private val forwards = mutableSetOf<NativeSshRemoteForward>()
 
     override suspend fun connect(config: SshConfig) {
         this.config = config
@@ -163,7 +164,59 @@ class NativeSshSession : SshSession {
                 "The SSH session ended before the Unix socket channel to $socketPath could open",
             )
         }
-        val channel = NativeSshStreamChannel(streamHandle, socketPath, onClose = ::untrackStream)
+        return trackAndOpen(NativeSshStreamChannel(streamHandle, socketPath, onClose = ::untrackStream))
+    }
+
+    override suspend fun openTcpChannel(host: String, port: Int): SshStreamChannel {
+        val target = "$host:$port"
+        val streamHandle = withSessionLockOnIo {
+            val sessionHandle = nativeSessionHandle
+            if (sessionHandle == 0L) throw SshStreamChannelException(Reason.DISCONNECTED, "SSH session is not connected")
+            GhosttyNative.nativeSshOpenDirectTcpip(sessionHandle, host.toByteArray(Charsets.UTF_8), port)
+        }
+        if (streamHandle == NativeStartBusy) {
+            throw SshStreamChannelException(Reason.FAILED, "Too many channels are opening on this session; try again shortly")
+        }
+        if (streamHandle == 0L) {
+            throw SshStreamChannelException(Reason.DISCONNECTED, "The SSH session ended before the channel to $target could open")
+        }
+        return trackAndOpen(NativeSshStreamChannel(streamHandle, target, onClose = ::untrackStream, tcp = true))
+    }
+
+    override suspend fun openRemoteForward(bindHost: String, port: Int): SshRemoteForward {
+        val forwardHandle = withSessionLockOnIo {
+            val sessionHandle = nativeSessionHandle
+            if (sessionHandle == 0L) throw SshStreamChannelException(Reason.DISCONNECTED, "SSH session is not connected")
+            GhosttyNative.nativeSshOpenRemoteForward(sessionHandle, bindHost.toByteArray(Charsets.UTF_8), port)
+        }
+        if (forwardHandle == NativeStartBusy) {
+            throw SshStreamChannelException(Reason.FAILED, "Too many forwards are pending on this session; try again shortly")
+        }
+        if (forwardHandle == 0L) {
+            throw SshStreamChannelException(Reason.DISCONNECTED, "The SSH session ended before the server could listen")
+        }
+        val forward = NativeSshRemoteForward(forwardHandle, "$bindHost:$port", ::trackAcceptedStream, ::untrackForward)
+        synchronized(streamLock) { forwards += forward }
+        var listening = false
+        try {
+            forward.awaitListening()
+            listening = true
+        } finally {
+            if (!listening) forward.close()
+        }
+        return forward
+    }
+
+    /** A connection a remote forward accepted: an open stream, tracked so [disconnect] closes it. */
+    private fun trackAcceptedStream(handle: Long, label: String): NativeSshStreamChannel =
+        NativeSshStreamChannel(handle, label, onClose = ::untrackStream, tcp = true)
+            .also { channel -> synchronized(streamLock) { streams += channel } }
+
+    private fun untrackForward(forward: NativeSshRemoteForward) {
+        synchronized(streamLock) { forwards -= forward }
+    }
+
+    private suspend fun trackAndOpen(channel: NativeSshStreamChannel): NativeSshStreamChannel {
         synchronized(streamLock) { streams += channel }
         var opened = false
         try {
@@ -262,6 +315,8 @@ class NativeSshSession : SshSession {
         // Close streams before deinit. Their native close still reaches the loop, which retires them while the
         // session is alive.
         val openStreams = synchronized(streamLock) { streams.toList().also { streams.clear() } }
+        val openForwards = synchronized(streamLock) { forwards.toList().also { forwards.clear() } }
+        openForwards.forEach { it.close() }
         openStreams.forEach { it.close() }
         synchronized(lock) {
             activeSftpClient?.close()

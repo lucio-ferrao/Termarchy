@@ -23,13 +23,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Text
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -52,6 +57,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.mrndtvndv.term.domain.PortForward
 import com.mrndtvndv.term.R
 import com.mrndtvndv.term.data.prefs.ArrowJoystickMode
 import com.mrndtvndv.term.data.prefs.KeyBarAction
@@ -442,6 +449,44 @@ private fun KeyboardRow(
 }
 
 /**
+ * An active port forward of the connection ("L3000", "R5555"), at the end of the row. A tap opens a menu to stop it, so a
+ * stray tap on the keyboard row stops nothing.
+ */
+@Composable
+private fun ForwardKey(forward: PortForward, onStop: (PortForward) -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        Text(
+            text = forward.label,
+            color = KeyboardRowColors.keyText,
+            fontSize = 12.sp,
+            maxLines = 1,
+            modifier = Modifier
+                .padding(horizontal = 2.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(KeyboardRowColors.key)
+                .clickable(role = Role.Button) { menu = true }
+                .semantics { contentDescription = "Port forward ${forward.spec}" }
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+        )
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            Text(
+                forward.spec,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+            DropdownMenuItem(
+                text = { Text("Stop forwarding") },
+                onClick = {
+                    menu = false
+                    onStop(forward)
+                },
+            )
+        }
+    }
+}
+
+/**
  * The button that opens the tabs (or Herdr's agents) as the first key of the key bar: Ecto's icon, flat in the key
  * color, with [badge] over it (a tab count, a status dot).
  */
@@ -481,6 +526,8 @@ fun KeyBar(
     tabsButton: (@Composable () -> Unit)?,
     agents: (@Composable () -> Unit)?,
     onHostAction: ((KeyBarHostAction) -> Unit)? = null,
+    forwards: List<PortForward> = emptyList(),
+    onStopForward: (PortForward) -> Unit = {},
     modifier: Modifier = Modifier,
     pillModifier: Modifier = Modifier,
 ) {
@@ -517,7 +564,10 @@ fun KeyBar(
                             }
                         }
                 },
-                hostActions = { agents?.invoke() },
+                hostActions = {
+                    forwards.forEach { forward -> key(forward.label) { ForwardKey(forward, onStopForward) } }
+                    agents?.invoke()
+                },
             )
             preview.target?.let { KeySwipePreviewOverlay(it, preview) }
         }

@@ -38,6 +38,7 @@ import com.mrndtvndv.term.herdr.HerdrState
 import com.mrndtvndv.term.herdr.KeyboardContext
 import com.mrndtvndv.term.herdr.keyboardContextOf
 import com.mrndtvndv.term.workspace.isHerdrFullUiTab
+import com.mrndtvndv.term.domain.PortForward
 import com.mrndtvndv.term.server.Server
 import com.mrndtvndv.term.server.TerminalEntry
 import com.mrndtvndv.term.server.isCompletingShell
@@ -99,6 +100,10 @@ fun TerminalTab(
         folder = herdrPane?.let { it.foregroundCwd ?: it.cwd },
         submittedLines = submittedLines,
     )
+    // The connection's port forwards, shown on the key bar to be stopped there.
+    val portForwards = appViewModel.getServer(serverId)?.portForwards
+    val forwards by (portForwards?.active ?: flowOf(emptyList()))
+        .collectAsStateWithLifecycle(initialValue = emptyList())
     var attempt by remember { mutableIntStateOf(0) }
     var failure by remember { mutableStateOf<String?>(null) }
     val currentIsActive by rememberUpdatedState(isActive)
@@ -130,6 +135,8 @@ fun TerminalTab(
                 keyboardContext = keyboardContext,
                 imeExtras = shellCompletions,
                 onLineSubmitted = { submittedLines++ },
+                forwards = forwards,
+                onStopForward = { forward -> portForwards?.cancel(forward.direction, forward.port) },
             )
             if (!entry.running) {
                 // A remote attachment says what the native end facts show, and nothing more: unknown ends stay unknown.
@@ -173,6 +180,8 @@ private fun TerminalSessionPane(
     keyboardContext: KeyboardContext?,
     imeExtras: Map<String, List<String>>,
     onLineSubmitted: () -> Unit,
+    forwards: List<PortForward>,
+    onStopForward: (PortForward) -> Unit,
 ) {
     val progress by workspaceViewModel.observeTerminalProgress(session).collectAsStateWithLifecycle()
     val programStatus by workspaceViewModel.observeProgramStatus(session).collectAsStateWithLifecycle()
@@ -191,6 +200,8 @@ private fun TerminalSessionPane(
         imeExtras = imeExtras,
         onLineSubmitted = onLineSubmitted,
         callbacks = callbacks,
+        forwards = forwards,
+        onStopForward = onStopForward,
     )
 }
 

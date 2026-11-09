@@ -50,7 +50,8 @@ internal object GhosttySshStreamNative : SshStreamNative {
 }
 
 /**
- * A direct Unix-socket channel. The native side owns the bytes and the libssh2 channel. This class
+ * A direct Unix-socket channel, or a TCP one for a port forward ([tcp]: [socketPath] is then host:port). The native
+ * side owns the bytes and the libssh2 channel. This class
  * makes the calls safe from any thread.
  *
  * Every native call runs inside an in-flight count. [close] marks the channel closed and wakes any
@@ -63,6 +64,7 @@ class NativeSshStreamChannel internal constructor(
     private val socketPath: String,
     private val native: SshStreamNative = GhosttySshStreamNative,
     private val onClose: (NativeSshStreamChannel) -> Unit = {},
+    private val tcp: Boolean = false,
 ) : SshStreamChannel {
     private val inFlight = AtomicInteger(0)
     private val closed = AtomicBoolean(false)
@@ -185,12 +187,16 @@ class NativeSshStreamChannel internal constructor(
             "for ${OPEN_TIMEOUT_MS / 1000} s.",
     )
 
-    private fun closedError() = SshStreamChannelException(Reason.CLOSED, "Unix socket channel to $socketPath is closed")
+    private fun closedError() = SshStreamChannelException(
+        Reason.CLOSED,
+        if (tcp) "Channel to $socketPath is closed" else "Unix socket channel to $socketPath is closed",
+    )
 
     private fun failureError(): SshStreamChannelException {
         val (code, detail) = withNative { native.failure(handle) to native.detail(handle) }
             ?: return closedError()
         val suffix = if (detail.isEmpty()) "" else " (native detail: $detail)"
+        if (tcp) return tcpFailureError(code, suffix)
         return when (code) {
             FAILURE_DENIED -> SshStreamChannelException(
                 Reason.DENIED,
@@ -212,6 +218,23 @@ class NativeSshStreamChannel internal constructor(
                 "Unix socket channel to $socketPath failed$suffix",
             )
         }
+    }
+
+    private fun tcpFailureError(code: Int, suffix: String) = when (code) {
+        FAILURE_DENIED -> SshStreamChannelException(
+            Reason.DENIED,
+            "The SSH server refused to forward to $socketPath$suffix: TCP forwarding is off for this user " +
+                "(AllowTcpForwarding in its sshd_config).",
+        )
+        FAILURE_UNREACHABLE -> SshStreamChannelException(
+            Reason.UNREACHABLE,
+            "Nothing accepts connections on $socketPath as the server sees it$suffix.",
+        )
+        FAILURE_DISCONNECTED -> SshStreamChannelException(
+            Reason.DISCONNECTED,
+            "The connection to $socketPath closed, or the SSH connection dropped$suffix",
+        )
+        else -> SshStreamChannelException(Reason.FAILED, "The channel to $socketPath failed$suffix")
     }
 
     internal companion object {

@@ -1364,6 +1364,137 @@ pub export fn Java_com_termux_terminal_GhosttyNative_nativeSshStreamDetail(
     return jni.*.*.NewStringUTF.?(jni, detail[0..].ptr);
 }
 
+// --- SSH port forwards ---
+// ssh -L opens a direct-tcpip stream per local connection, used with the stream calls above.
+// ssh -R is a Listener: await as a stream (1 listening, 0 asking, -1 closed, -2 refused), then
+// accept gives stream handles (>0), 0 when none came in time, -1 closed, -2 failed.
+
+fn forwardHostFromBytes(jni: *c.JNIEnv, host: c.jbyteArray, out: []u8) ?[]u8 {
+    if (host == null) return null;
+    const length = jni.*.*.GetArrayLength.?(jni, host);
+    if (length <= 0 or length > out.len) return null;
+    jni.*.*.GetByteArrayRegion.?(jni, host, 0, length, @ptrCast(out.ptr));
+    return out[0..@intCast(length)];
+}
+
+pub export fn Java_com_termux_terminal_GhosttyNative_nativeSshOpenDirectTcpip(
+    env: ?*c.JNIEnv,
+    clazz: c.jclass,
+    session_handle: jlong,
+    host: c.jbyteArray,
+    port: jint,
+) jlong {
+    _ = clazz;
+    const jni = env orelse return 0;
+    const session = sshSessionFromHandle(session_handle) orelse return 0;
+    var buffer: [255]u8 = undefined;
+    const host_bytes = forwardHostFromBytes(jni, host, &buffer) orelse return 0;
+    const stream = session.openDirectTcpip(host_bytes, port) catch |err| return startFailureHandle(err);
+    return @intCast(@intFromPtr(stream));
+}
+
+fn listenerFromHandle(listener_handle: jlong) ?*ssh.SshNativeSession.Listener {
+    if (listener_handle <= 0) return null;
+    return @as(*ssh.SshNativeSession.Listener, @ptrFromInt(@as(usize, @intCast(listener_handle))));
+}
+
+pub export fn Java_com_termux_terminal_GhosttyNative_nativeSshOpenRemoteForward(
+    env: ?*c.JNIEnv,
+    clazz: c.jclass,
+    session_handle: jlong,
+    host: c.jbyteArray,
+    port: jint,
+) jlong {
+    _ = clazz;
+    const jni = env orelse return 0;
+    const session = sshSessionFromHandle(session_handle) orelse return 0;
+    var buffer: [255]u8 = undefined;
+    const host_bytes = forwardHostFromBytes(jni, host, &buffer) orelse return 0;
+    const listener = session.openRemoteForward(host_bytes, port) catch |err| return startFailureHandle(err);
+    return @intCast(@intFromPtr(listener));
+}
+
+pub export fn Java_com_termux_terminal_GhosttyNative_nativeSshForwardAwaitOpen(
+    env: ?*c.JNIEnv,
+    clazz: c.jclass,
+    listener_handle: jlong,
+    timeout_ms: jint,
+) jint {
+    _ = env;
+    _ = clazz;
+    const listener = listenerFromHandle(listener_handle) orelse return stream_status_failed;
+    return listener.awaitOpen(timeout_ms);
+}
+
+pub export fn Java_com_termux_terminal_GhosttyNative_nativeSshForwardBoundPort(
+    env: ?*c.JNIEnv,
+    clazz: c.jclass,
+    listener_handle: jlong,
+) jint {
+    _ = env;
+    _ = clazz;
+    const listener = listenerFromHandle(listener_handle) orelse return 0;
+    return listener.boundPort();
+}
+
+pub export fn Java_com_termux_terminal_GhosttyNative_nativeSshForwardAccept(
+    env: ?*c.JNIEnv,
+    clazz: c.jclass,
+    listener_handle: jlong,
+    timeout_ms: jint,
+) jlong {
+    _ = env;
+    _ = clazz;
+    const listener = listenerFromHandle(listener_handle) orelse return stream_status_closed;
+    return listener.accept(timeout_ms);
+}
+
+pub export fn Java_com_termux_terminal_GhosttyNative_nativeSshForwardClose(
+    env: ?*c.JNIEnv,
+    clazz: c.jclass,
+    listener_handle: jlong,
+) void {
+    _ = env;
+    _ = clazz;
+    const listener = listenerFromHandle(listener_handle) orelse return;
+    listener.close();
+}
+
+pub export fn Java_com_termux_terminal_GhosttyNative_nativeSshForwardRelease(
+    env: ?*c.JNIEnv,
+    clazz: c.jclass,
+    listener_handle: jlong,
+) void {
+    _ = env;
+    _ = clazz;
+    const listener = listenerFromHandle(listener_handle) orelse return;
+    listener.release();
+}
+
+pub export fn Java_com_termux_terminal_GhosttyNative_nativeSshForwardFailure(
+    env: ?*c.JNIEnv,
+    clazz: c.jclass,
+    listener_handle: jlong,
+) jint {
+    _ = env;
+    _ = clazz;
+    const listener = listenerFromHandle(listener_handle) orelse return 0;
+    return listener.failureCode();
+}
+
+pub export fn Java_com_termux_terminal_GhosttyNative_nativeSshForwardDetail(
+    env: ?*c.JNIEnv,
+    clazz: c.jclass,
+    listener_handle: jlong,
+) c.jstring {
+    _ = clazz;
+    const jni = env orelse return null;
+    const listener = listenerFromHandle(listener_handle) orelse return null;
+    var detail: [ssh.SshNativeSession.StreamChannel.detail_capacity + 1]u8 = undefined;
+    _ = listener.copyDetail(&detail);
+    return jni.*.*.NewStringUTF.?(jni, detail[0..].ptr);
+}
+
 // --- SSH Exec & SFTP Support ---
 
 fn sshSessionFromHandle(session_handle: jlong) ?*ssh.SshNativeSession {

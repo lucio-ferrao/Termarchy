@@ -254,6 +254,35 @@ public final class GhosttyNative {
     public static native String nativeSshStreamDetail(long streamHandle);
 
     /**
+     * Links a direct-tcpip channel (ssh -L) to {@code host}:{@code port} as the server sees them; host in UTF-8. Returns
+     * a stream handle used with the stream calls above, 0 when the session is not running or the target is invalid,
+     * or -1 when too many opens are pending (retryable).
+     */
+    public static native long nativeSshOpenDirectTcpip(long sessionHandle, byte[] host, int port);
+    /**
+     * Asks the server to listen on {@code host}:{@code port} (ssh -R; port 0 lets it choose). Returns the forward's
+     * handle, 0 when the session is not running or the address is invalid, or -1 when too many are pending.
+     */
+    public static native long nativeSshOpenRemoteForward(long sessionHandle, byte[] host, int port);
+    /** Waits up to {@code timeoutMs}. Returns 1 when listening, 0 while still asking, -1 when closed, -2 when refused. */
+    public static native int nativeSshForwardAwaitOpen(long forwardHandle, int timeoutMs);
+    /** The port the server listens on, once listening. */
+    public static native int nativeSshForwardBoundPort(long forwardHandle);
+    /**
+     * The next connection to the forward, waiting up to {@code timeoutMs}: an open stream handle the caller owns
+     * (close and release it as any stream), 0 when none came in time, -1 after close, -2 when the forward failed.
+     */
+    public static native long nativeSshForwardAccept(long forwardHandle, int timeoutMs);
+    /** Asks the native loop to cancel the forward; connections not yet accepted are closed. Never blocks. */
+    public static native void nativeSshForwardClose(long forwardHandle);
+    /** Drops the JVM's reference. Call once after {@link #nativeSshForwardClose}, with no call in flight. */
+    public static native void nativeSshForwardRelease(long forwardHandle);
+    /** Failure reason after a -2 status, as for streams. */
+    public static native int nativeSshForwardFailure(long forwardHandle);
+    /** libssh2's message for the failure, or an empty string. */
+    public static native String nativeSshForwardDetail(long forwardHandle);
+
+    /**
      * Starts {@code command} on a new exec channel. Returns an op handle, 0 when the session is not running,
      * or -1 when too many ops are pending (retryable).
      */

@@ -42,6 +42,11 @@
             </intent-filter>
         </activity>
 
+        <!-- Port forwards asked by the Keyarchy keyboard; the service checks the caller's package itself. -->
+        <service
+            android:name="com.mrndtvndv.term.service.PortForwardService"
+            android:exported="true" />
+
         <service
             android:name="com.mrndtvndv.term.service.SshSessionService"
             android:enabled="true"
