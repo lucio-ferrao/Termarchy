@@ -99,7 +99,6 @@ import com.mrndtvndv.term.herdr.HerdrTab
 import com.mrndtvndv.term.herdr.HerdrWorkspace
 import com.mrndtvndv.term.herdr.panesIn
 import com.mrndtvndv.term.herdr.tabsIn
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -724,7 +723,7 @@ private fun HerdrTabGroup(
         val tabName = herdrTabName(tab.label)?.let { paneTitle(it, singleServer) }
         panes.forEachIndexed { index, pane ->
             val agent = snapshot.agents.firstOrNull { it.terminalId == pane.terminalId }
-            val own = agent?.name ?: (pane.title ?: pane.terminalTitle)?.let { paneTitle(it, singleServer) }
+            val own = agent?.name ?: (pane.title ?: pane.terminalTitleStripped ?: pane.terminalTitle)?.let { paneTitle(it, singleServer) }
                 ?: pane.label ?: tab.label.ifBlank { "Terminal" }
             key(pane.terminalId) {
                 HerdrAgentRow(
@@ -889,7 +888,7 @@ private fun agentStatusColor(status: HerdrAgentStatus): Color = with(herdrStatus
 @Composable
 private fun AgentStatusIndicator(status: HerdrAgentStatus, tint: Color) {
     when (status) {
-        HerdrAgentStatus.Working -> WorkingDots(tint)
+        HerdrAgentStatus.Working -> WorkingGhost(tint, Modifier.size(20.dp))
         HerdrAgentStatus.Blocked -> Icon(
             Icons.Default.PanTool,
             contentDescription = "Needs input",
@@ -906,27 +905,3 @@ private fun AgentStatusIndicator(status: HerdrAgentStatus, tint: Color) {
     }
 }
 
-@Composable
-private fun WorkingDots(tint: Color) {
-    var highlightedIndex by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(300)
-            highlightedIndex = (highlightedIndex + 1) % 3
-        }
-    }
-    Row(
-        modifier = Modifier.semantics { contentDescription = "Working" },
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        repeat(3) { index ->
-            Box(
-                modifier = Modifier.size(5.dp).background(
-                    color = if (index == highlightedIndex) tint else tint.copy(alpha = 0.24f),
-                    shape = CircleShape,
-                ),
-            )
-        }
-    }
-}

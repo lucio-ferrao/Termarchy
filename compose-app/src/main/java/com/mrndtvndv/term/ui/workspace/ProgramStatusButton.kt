@@ -19,7 +19,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.rounded.SmartToy
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -74,9 +73,10 @@ fun AgentsButton(state: ProgramStatusState, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         if (urgent == ProgramState.Working) {
-            CircularProgressIndicator(modifier = Modifier.size(30.dp), color = statusColors.working, strokeWidth = 2.dp)
+            WorkingGhost(statusColors.working, Modifier.size(24.dp))
+        } else {
+            Icon(imageVector = Icons.Rounded.SmartToy, contentDescription = null, tint = iconTint)
         }
-        Icon(imageVector = Icons.Rounded.SmartToy, contentDescription = null, tint = iconTint)
         dotColor?.let { color ->
             Box(Modifier.align(Alignment.TopEnd).size(8.dp).background(color, CircleShape))
         }
