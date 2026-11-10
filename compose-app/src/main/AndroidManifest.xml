@@ -53,6 +53,12 @@
             android:exported="false"
             android:foregroundServiceType="specialUse" />
 
+        <!-- The state of the Herdr agents for the Keyarchy launcher; the provider checks the caller's package itself. -->
+        <provider
+            android:name="com.mrndtvndv.term.herdr.AgentStateProvider"
+            android:authorities="${applicationId}.agents"
+            android:exported="true" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

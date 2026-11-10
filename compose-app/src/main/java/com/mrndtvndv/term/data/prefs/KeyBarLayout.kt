@@ -28,6 +28,14 @@ sealed interface KeyBarAction {
     @SerialName("alt")
     data object Alt : KeyBarAction
 
+    /**
+     * Makes taps on the terminal right clicks, for a program that asks for the mouse (Herdr's menus): a tap arms it
+     * for the next tap, a second one locks it, as Alt.
+     */
+    @Serializable
+    @SerialName("right_click")
+    data object RightClick : KeyBarAction
+
     /** The arrow joystick. It is its own gesture target and has no swipe actions. */
     @Serializable
     @SerialName("joystick")
@@ -88,8 +96,8 @@ data class KeyBarItem(
 data class KeyBarLayout(val items: List<KeyBarItem>)
 
 /**
- * The bar users get when no layout is saved: Esc, Tab, Ctrl, Alt, the arrow joystick, then the Git and SFTP icons,
- * which only the Herdr route shows.
+ * The bar users get when no layout is saved: Esc, Tab, Ctrl, Alt, the arrow joystick, the right click, then the Git
+ * and SFTP icons, which only the Herdr route shows.
  */
 fun defaultKeyBarLayout(): KeyBarLayout = KeyBarLayout(
     listOf(
@@ -98,6 +106,7 @@ fun defaultKeyBarLayout(): KeyBarLayout = KeyBarLayout(
         KeyBarItem(id = "ctrl", label = "Ctrl", tap = KeyBarAction.Ctrl),
         KeyBarItem(id = "alt", label = "Alt", tap = KeyBarAction.Alt),
         KeyBarItem(id = "joystick", label = "Arrows", tap = KeyBarAction.Joystick),
+        KeyBarItem(id = "right_click", label = "Right click", tap = KeyBarAction.RightClick),
         hostIconItem(KeyBarHostAction.Git),
         hostIconItem(KeyBarHostAction.Sftp),
     ),
@@ -218,7 +227,7 @@ private fun KeyBarAction.bounded(): KeyBarAction? = when (this) {
     is KeyBarAction.Text -> takeIf { KeyBarLimits.isValidText(it.text) }
     is KeyBarAction.Macro -> takeIf { isValidMacro(it.steps) }
     is KeyBarAction.Host -> this
-    KeyBarAction.Ctrl, KeyBarAction.Alt, KeyBarAction.Joystick -> this
+    KeyBarAction.Ctrl, KeyBarAction.Alt, KeyBarAction.RightClick, KeyBarAction.Joystick -> this
 }
 
 private fun KeyBarAction?.boundedSwipe(): KeyBarAction? = this?.bounded()?.takeIf { it.isSwipeable() }

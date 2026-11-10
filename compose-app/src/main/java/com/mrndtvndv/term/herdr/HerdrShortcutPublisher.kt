@@ -6,7 +6,6 @@ import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
 import android.os.Build
-import android.os.PersistableBundle
 import android.util.Log
 import com.mrndtvndv.term.MainActivity
 import com.mrndtvndv.term.R
@@ -15,11 +14,10 @@ import com.mrndtvndv.term.ui.notification.NotificationDestinationCodec
 
 /**
  * Keeps one launcher shortcut per pane of a server's Herdr session, opening the app on that pane (connecting first,
- * as a notification tap does): the most recent ones, as many as the launcher takes, named by their Herdr tab. Each one
- * tells a launcher how recent it is in its extras: [EXTRA_TIME], when its agent last changed state, and
- * [EXTRA_ACTIVE] while it works or waits for input (as recent as now). A shortcut is updated only when what it shows
- * or tells changes. Panes gone from the session lose their shortcut; disconnecting keeps them, so they still open the
- * session later.
+ * as a notification tap does): the most recent ones, as many as the launcher takes, named by their Herdr tab. The
+ * state of their agents goes to [AgentStates] (read by Keyarchy, live) and not into the shortcuts: Android lets an app
+ * in the background update its shortcuts only 10 times a day, so a shortcut is updated only when its name changes.
+ * Panes gone from the session lose their shortcut; disconnecting keeps them, so they still open the session later.
  */
 class HerdrShortcutPublisher(
     private val context: Context,
@@ -57,27 +55,27 @@ class HerdrShortcutPublisher(
             val infos = chosen.mapIndexedNotNull { rank, shortcut ->
                 val label = labels.getValue(shortcut.id)
                 val shown = ours[shortcut.id]
+                // the state and the order change all the time: only a new name is worth one of the few updates
                 val same = shown != null && shown.shortLabel?.toString() == label &&
-                    shown.longLabel?.toString() == longLabel(shortcut) && shown.rank == rank &&
-                    shown.extras?.getLong(EXTRA_TIME, -1L) == shortcut.since &&
-                    shown.extras?.getBoolean(EXTRA_ACTIVE, false) == shortcut.active
+                    shown.longLabel?.toString() == longLabel(shortcut)
                 if (same) null else shortcut to info(shortcut, label, rank)
             }
             val added = infos.filter { (shortcut, _) -> shortcut.id !in ours }.map { it.second }
             val updated = infos.filter { (shortcut, _) -> shortcut.id in ours }.map { it.second }
             if (added.isNotEmpty()) manager.addDynamicShortcuts(added)
             if (updated.isNotEmpty()) manager.updateShortcuts(updated)
+            if (AgentStates.set(serverId, chosen.map { it.agentState() })) AgentStateProvider.notifyChanged(context)
         }.onFailure { Log.w(TAG, "Could not publish the Herdr shortcuts of $serverId", it) }
     }
 
-    /** The agent's status in a few words, or the pane's folder when it has no agent. */
-    private fun longLabel(shortcut: HerdrPaneShortcut): String = when (shortcut.status) {
-        HerdrAgentStatus.Working -> context.getString(R.string.herdr_shortcut_working)
-        HerdrAgentStatus.Blocked -> context.getString(R.string.herdr_shortcut_blocked)
-        HerdrAgentStatus.Done -> context.getString(R.string.herdr_shortcut_done)
-        HerdrAgentStatus.Idle -> context.getString(R.string.herdr_shortcut_idle)
-        else -> shortcut.folder.ifEmpty { shortcut.title }
+    /** On disconnecting: the states of this server's agents are no longer known (the shortcuts stay). */
+    fun forget() {
+        observed.clear()
+        if (AgentStates.set(serverId, emptyList())) AgentStateProvider.notifyChanged(context)
     }
+
+    /** The pane's folder, or its title when the folder is unknown: what changes little. */
+    private fun longLabel(shortcut: HerdrPaneShortcut): String = shortcut.folder.ifEmpty { shortcut.title }
 
     private fun info(shortcut: HerdrPaneShortcut, label: String, rank: Int): ShortcutInfo {
         val intent = Intent(context, MainActivity::class.java)
@@ -91,23 +89,11 @@ class HerdrShortcutPublisher(
             .setIcon(Icon.createWithResource(context, if (shortcut.isClaude) R.drawable.ic_shortcut_claude else R.drawable.ic_shortcut_terminal))
             .setIntent(intent)
             .setRank(rank)
-            .setExtras(
-                PersistableBundle().apply {
-                    putLong(EXTRA_TIME, shortcut.since)
-                    putBoolean(EXTRA_ACTIVE, shortcut.active)
-                },
-            )
             .build()
     }
 
     companion object {
         private const val TAG = "HerdrShortcuts"
         const val ACTION_OPEN_HERDR_TERMINAL = "com.mrndtvndv.term.OPEN_HERDR_TERMINAL"
-
-        /** When the pane's agent last changed state, wall-clock millis (0 when unknown), for Keyarchy's order. */
-        const val EXTRA_TIME = "org.ferrao.homekey.time"
-
-        /** True while the pane's agent works or waits for input: as recent as now. */
-        const val EXTRA_ACTIVE = "org.ferrao.homekey.active"
     }
 }

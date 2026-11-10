@@ -196,7 +196,8 @@ private fun KeyBarAction?.initialPickerTab(): KeyBarActionPickerTab = when (this
         KeyBarActionPickerTab.Snippet
     }
     is KeyBarAction.Text -> KeyBarActionPickerTab.Snippet
-    KeyBarAction.Ctrl, KeyBarAction.Alt, KeyBarAction.Joystick -> KeyBarActionPickerTab.Modifier
+    KeyBarAction.Ctrl, KeyBarAction.Alt, KeyBarAction.RightClick, KeyBarAction.Joystick ->
+        KeyBarActionPickerTab.Modifier
     is KeyBarAction.Host -> KeyBarActionPickerTab.Herdr
 }
 

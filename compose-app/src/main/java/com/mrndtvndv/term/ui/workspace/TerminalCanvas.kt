@@ -219,6 +219,8 @@ private fun rememberModifierKeys(modifierKeys: ModifierKeys): ModifierKeyReader 
 
             override fun readAlt(): Boolean = modifierKeys.readAlt()
 
+            override fun readRightClick(): Boolean = modifierKeys.readRightClick()
+
             // The key bar has no shift or fn modifiers.
             override fun readShift(): Boolean = false
 

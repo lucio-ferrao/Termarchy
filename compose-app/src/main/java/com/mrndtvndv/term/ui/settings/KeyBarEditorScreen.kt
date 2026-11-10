@@ -525,7 +525,7 @@ private fun ItemRowDetails(item: KeyBarItem, summary: String, modifier: Modifier
 private fun KeyBarItem.rowSummary(): String {
     val tapSummary = when (tap) {
         KeyBarAction.Ctrl -> "tap arms · hold locks"
-        KeyBarAction.Alt -> "tap arms · tap twice locks"
+        KeyBarAction.Alt, KeyBarAction.RightClick -> "tap arms · tap twice locks"
         KeyBarAction.Joystick -> "joystick"
         else -> null
     }

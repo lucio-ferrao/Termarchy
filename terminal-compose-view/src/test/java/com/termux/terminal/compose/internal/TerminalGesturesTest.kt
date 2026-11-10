@@ -52,6 +52,14 @@ class TerminalGesturesTest {
     }
 
     @Test
+    fun rightClickTapBuildsRightButtonPair() {
+        val events = tapMouseEventsForPosition(120f, 640f, metrics(), TerminalPointerEvent.BUTTON_RIGHT)
+
+        assertEquals(listOf(TerminalPointerEvent.Action.PRESS, TerminalPointerEvent.Action.RELEASE), events.map { it.action })
+        assertTrue(events.all { it.button == TerminalPointerEvent.BUTTON_RIGHT })
+    }
+
+    @Test
     fun pinchZoomAccumulatesBelowThresholdWithoutChangingFontSize() {
         var changedSize = 0
         val nextScale = applyPinchZoomStep(

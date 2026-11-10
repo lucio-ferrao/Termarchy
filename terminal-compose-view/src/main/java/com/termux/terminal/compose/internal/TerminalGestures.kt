@@ -29,6 +29,7 @@ import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import kotlinx.coroutines.CoroutineScope
+import com.termux.terminal.compose.ModifierKeyReader
 import com.termux.terminal.compose.TerminalCanvasConfig
 import com.termux.terminal.compose.TerminalCommand
 import com.termux.terminal.compose.TerminalFrame
@@ -138,7 +139,8 @@ private data class TapContext(
     val config: TerminalCanvasConfig,
     val selectionState: TerminalSelectionState,
     val imeHost: ImeHost,
-    val focusRequester: FocusRequester
+    val focusRequester: FocusRequester,
+    val modifierKeys: ModifierKeyReader
 )
 
 /** Attaches the scroll/zoom/drag gesture handling to the terminal canvas. */
@@ -328,10 +330,12 @@ internal fun Modifier.terminalTaps(
     selectionState: TerminalSelectionState,
     imeHost: ImeHost,
     focusRequester: FocusRequester,
-    hapticFeedback: HapticFeedback
+    hapticFeedback: HapticFeedback,
+    modifierKeys: ModifierKeyReader
 ): Modifier {
     val currentMetrics by rememberUpdatedState(metrics)
     val currentConfig by rememberUpdatedState(config)
+    val currentModifierKeys by rememberUpdatedState(modifierKeys)
     val motionEventState = remember { TerminalTapMotionEventState() }
     return pointerInteropFilter(onTouchEvent = motionEventState::record)
         .pointerInput(controller, selectionState, imeHost, focusRequester) {
@@ -346,7 +350,8 @@ internal fun Modifier.terminalTaps(
                             config = currentConfig,
                             selectionState = selectionState,
                             imeHost = imeHost,
-                            focusRequester = focusRequester
+                            focusRequester = focusRequester,
+                            modifierKeys = currentModifierKeys
                         )
                     )
                 },
@@ -377,12 +382,16 @@ private fun handleTap(
         // Ghostty's encoder ignores mouse events when tracking is disabled, so
         // forwarding the pair unconditionally avoids dropping taps during a mode
         // transition.
-        sendTapAsMouseClick(offset.x, offset.y, context.metrics, context.controller)
+        // An armed or locked right click from the consumer turns this tap into a right click; a link is not opened by it
+        val rightClick = context.modifierKeys.readRightClick()
+        context.modifierKeys.clearConsumedModifiers()
+        val button = if (rightClick) TerminalPointerEvent.BUTTON_RIGHT else TerminalPointerEvent.BUTTON_LEFT
+        sendTapAsMouseClick(offset.x, offset.y, button, context.metrics, context.controller)
         if (shouldOpenKeyboard(context.config, frame, event)) {
             context.focusRequester.requestFocus()
             context.imeHost.open()
         }
-        val link = linkAt(frame, offset.x, offset.y, context.metrics)
+        val link = if (rightClick) null else linkAt(frame, offset.x, offset.y, context.metrics)
         if (link != null) {
             context.config.onOpenUrl(link)
         }
@@ -430,14 +439,15 @@ private fun handleLongPress(
     selectionState.startWordSelection(frame, column, row)
 }
 
-/** Builds the left-button press/release pair used for every terminal tap. */
+/** Builds the press/release pair of [button] used for every terminal tap. */
 private fun sendTapAsMouseClick(
     x: Float,
     y: Float,
+    button: Int,
     metrics: TerminalMetrics,
     controller: TerminalController
 ) {
-    for (event in tapMouseEventsForPosition(x, y, metrics)) {
+    for (event in tapMouseEventsForPosition(x, y, metrics, button)) {
         controller.submit(TerminalCommand.Mouse(event))
     }
 }
@@ -446,11 +456,12 @@ private fun sendTapAsMouseClick(
 internal fun tapMouseEventsForPosition(
     x: Float,
     y: Float,
-    metrics: TerminalMetrics
+    metrics: TerminalMetrics,
+    button: Int = TerminalPointerEvent.BUTTON_LEFT
 ): List<TerminalPointerEvent> {
     val press = TerminalPointerEvent(
         action = TerminalPointerEvent.Action.PRESS,
-        button = TerminalPointerEvent.BUTTON_LEFT,
+        button = button,
         xPx = x,
         yPx = y,
         cellWidthPx = metrics.cellWidthPx,

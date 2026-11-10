@@ -61,10 +61,11 @@ internal fun ModifierKeyButton(
     onLongClick: (() -> Unit)? = null,
     item: KeyBarItem? = null,
     onSwipe: ((KeySwipe) -> Unit)? = null,
+    icon: ImageVector? = null,
 ) {
     val assigned = item?.assignedSwipes().orEmpty()
     if (item == null || onSwipe == null || assigned.isEmpty()) {
-        ModifierKeyButtonFace(label, state, onClick, onLongClick)
+        ModifierKeyButtonFace(label, state, onClick, onLongClick, icon)
         return
     }
 
@@ -77,6 +78,7 @@ private fun ModifierKeyButtonFace(
     state: KeyModifierState,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)?,
+    icon: ImageVector?,
 ) {
     val colors = MaterialTheme.colorScheme
     val (containerColor, contentColor) = when (state) {
@@ -90,6 +92,7 @@ private fun ModifierKeyButtonFace(
         onLongClick = onLongClick,
         containerColor = containerColor,
         contentColor = contentColor,
+        icon = icon,
         stateLabel = when (state) {
             KeyModifierState.OFF -> "Off"
             KeyModifierState.ARMED -> "Armed"
@@ -202,10 +205,12 @@ private fun KeyButton(
     containerColor: Color = Color.Transparent,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     stateLabel: String? = null,
+    icon: ImageVector? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     KeyFace(
         label = label,
+        icon = icon,
         interactionSource = interactionSource,
         gestures = Modifier.combinedClickable(
             interactionSource = interactionSource,
@@ -250,7 +255,8 @@ internal fun SwipeKeyButton(
     }
     KeyFace(
         label = item.label,
-        hostAction = hostKind,
+        icon = hostKind?.icon,
+        iconDescription = hostKind?.spokenName(),
         interactionSource = interactionSource,
         gestures = Modifier
             .onGloballyPositioned { bounds.rect = it.boundsInWindow() }
@@ -294,7 +300,9 @@ private fun KeyFace(
     containerColor: Color = Color.Transparent,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     stateLabel: String? = null,
-    hostAction: KeyBarHostAction? = null,
+    icon: ImageVector? = null,
+    /** what TalkBack says for [icon]; null leaves the key's own semantics (its label) */
+    iconDescription: String? = null,
 ) {
     val pressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
@@ -328,10 +336,10 @@ private fun KeyFace(
             .padding(horizontal = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        if (hostAction != null) {
+        if (icon != null) {
             Icon(
-                imageVector = hostAction.icon,
-                contentDescription = hostAction.spokenName(),
+                imageVector = icon,
+                contentDescription = iconDescription ?: label,
                 modifier = Modifier.size(20.dp),
                 tint = contentColor,
             )
@@ -368,6 +376,7 @@ internal fun KeyBarAction.spokenName(): String = when (this) {
     is KeyBarAction.Macro -> "macro " + steps.joinToString(", ") { it.spokenName() }.take(SpokenMacroLength)
     KeyBarAction.Ctrl -> "Control"
     KeyBarAction.Alt -> "Alt"
+    KeyBarAction.RightClick -> "right click"
     is KeyBarAction.Host -> kind.spokenName()
     KeyBarAction.Joystick -> "arrow keys"
 }

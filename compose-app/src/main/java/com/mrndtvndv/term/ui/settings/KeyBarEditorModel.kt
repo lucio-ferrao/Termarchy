@@ -28,6 +28,7 @@ fun KeyBarAction.defaultLabel(): String? = when (this) {
     is KeyBarAction.Host -> kind.displayName()
     KeyBarAction.Ctrl -> "Ctrl"
     KeyBarAction.Alt -> "Alt"
+    KeyBarAction.RightClick -> "Right click"
     KeyBarAction.Joystick -> "Arrows"
 }
 

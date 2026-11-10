@@ -159,6 +159,7 @@ internal fun KeyBarAction.previewLabel(): String = when (this) {
     is KeyBarAction.Macro -> steps.joinToString(" ") { it.previewLabel() }.truncated(PreviewMacroLength)
     KeyBarAction.Ctrl -> "Ctrl"
     KeyBarAction.Alt -> "Alt"
+    KeyBarAction.RightClick -> "Right click"
     KeyBarAction.Joystick -> "Arrows"
     is KeyBarAction.Host -> when (kind) {
         KeyBarHostAction.Git -> "Git"

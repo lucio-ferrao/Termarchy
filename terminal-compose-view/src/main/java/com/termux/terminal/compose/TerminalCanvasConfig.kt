@@ -94,6 +94,9 @@ interface ModifierKeyReader {
     fun readShift(): Boolean
     fun readFn(): Boolean
 
+    /** Whether a tap on the terminal is a right click instead of a left one (for a program that asks for the mouse). */
+    fun readRightClick(): Boolean = false
+
     /** Completes one-shot modifier consumption after an input dispatch. */
     fun clearConsumedModifiers() = Unit
 

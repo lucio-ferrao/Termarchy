@@ -58,6 +58,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import com.mrndtvndv.term.domain.PortForward
 import com.mrndtvndv.term.R
 import com.mrndtvndv.term.data.prefs.ArrowJoystickMode
@@ -83,9 +85,13 @@ class ModifierKeys {
         private set
     var alt by mutableStateOf(KeyModifierState.OFF)
         private set
+    /** Taps on the terminal are right clicks while this is on. */
+    var rightClick by mutableStateOf(KeyModifierState.OFF)
+        private set
 
     @Volatile private var ctrlConsumed = false
     @Volatile private var altConsumed = false
+    @Volatile private var rightClickConsumed = false
 
     fun tapCtrl() {
         ctrlConsumed = false
@@ -105,6 +111,11 @@ class ModifierKeys {
         alt = nextTapState(alt)
     }
 
+    fun tapRightClick() {
+        rightClickConsumed = false
+        rightClick = nextTapState(rightClick)
+    }
+
     /**
      * Reads the dispatch state without mutating Compose state in the input hot path.
      * The visual state is cleared by [clearConsumed] after dispatch.
@@ -112,6 +123,8 @@ class ModifierKeys {
     fun readCtrl(): Boolean = readModifier(ctrl) { ctrlConsumed = true }
 
     fun readAlt(): Boolean = readModifier(alt) { altConsumed = true }
+
+    fun readRightClick(): Boolean = readModifier(rightClick) { rightClickConsumed = true }
 
     fun clearConsumed() {
         if (ctrlConsumed) {
@@ -121,6 +134,10 @@ class ModifierKeys {
         if (altConsumed) {
             altConsumed = false
             if (alt == KeyModifierState.ARMED) alt = KeyModifierState.OFF
+        }
+        if (rightClickConsumed) {
+            rightClickConsumed = false
+            if (rightClick == KeyModifierState.ARMED) rightClick = KeyModifierState.OFF
         }
     }
 
@@ -539,6 +556,7 @@ fun KeyBar(
             is KeyBarAction.Host -> onHostAction?.invoke(action.kind)
             KeyBarAction.Ctrl -> modifiers.tapCtrl()
             KeyBarAction.Alt -> modifiers.tapAlt()
+            KeyBarAction.RightClick -> modifiers.tapRightClick()
             KeyBarAction.Joystick -> Unit
         }
     }
@@ -604,6 +622,12 @@ private fun KeyBarItemButton(
             onClick = modifiers::tapAlt,
             item = item,
             onSwipe = dispatchSwipe,
+        )
+        KeyBarAction.RightClick -> ModifierKeyButton(
+            label = item.label,
+            state = modifiers.rightClick,
+            onClick = modifiers::tapRightClick,
+            icon = ImageVector.vectorResource(R.drawable.ic_right_click),
         )
         KeyBarAction.Joystick -> ArrowJoystick(
             mode = joystickMode,

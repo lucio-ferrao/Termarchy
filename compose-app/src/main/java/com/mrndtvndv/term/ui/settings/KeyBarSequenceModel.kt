@@ -41,7 +41,8 @@ fun KeyBarAction.toSteps(): List<MacroStep> = when (this) {
     is KeyBarAction.Text -> listOf(MacroStep.Text(text))
     is KeyBarAction.Key -> listOf(MacroStep.Key(keyCode))
     is KeyBarAction.Macro -> steps
-    KeyBarAction.Ctrl, KeyBarAction.Alt, KeyBarAction.Joystick, is KeyBarAction.Host -> emptyList()
+    KeyBarAction.Ctrl, KeyBarAction.Alt, KeyBarAction.RightClick, KeyBarAction.Joystick, is KeyBarAction.Host ->
+        emptyList()
 }
 
 /** Human-readable text for editor rows and slots. Callers apply their own line clipping. */
@@ -50,7 +51,7 @@ fun KeyBarAction.summary(): String = when (this) {
     is KeyBarAction.Text -> text.replace("\n", "↵")
     is KeyBarAction.Macro -> steps.joinToString(" ") { it.summary() }
     is KeyBarAction.Host -> kind.displayName()
-    KeyBarAction.Ctrl, KeyBarAction.Alt, KeyBarAction.Joystick -> defaultLabel().orEmpty()
+    KeyBarAction.Ctrl, KeyBarAction.Alt, KeyBarAction.RightClick, KeyBarAction.Joystick -> defaultLabel().orEmpty()
 }
 
 private fun MacroStep.Key.isPlainCatalogKey(): Boolean =

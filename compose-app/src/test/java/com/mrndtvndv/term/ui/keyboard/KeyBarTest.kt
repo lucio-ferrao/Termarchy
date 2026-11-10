@@ -144,6 +144,26 @@ class KeyBarTest {
     }
 
     @Test
+    fun rightClickArmsForOneTapAndLocksOnASecondTap() {
+        val keys = ModifierKeys()
+
+        keys.tapRightClick()
+        assertEquals(KeyModifierState.ARMED, keys.rightClick)
+        assertTrue(keys.readRightClick())
+        keys.clearConsumed()
+        assertEquals(KeyModifierState.OFF, keys.rightClick)
+
+        keys.tapRightClick()
+        keys.tapRightClick()
+        assertEquals(KeyModifierState.LOCKED, keys.rightClick)
+        assertTrue(keys.readRightClick())
+        keys.clearConsumed()
+        assertEquals(KeyModifierState.LOCKED, keys.rightClick)
+        keys.tapRightClick()
+        assertEquals(KeyModifierState.OFF, keys.rightClick)
+    }
+
+    @Test
     fun holdingCtrlLocksUntilTappedAgain() {
         val keys = ModifierKeys()
 

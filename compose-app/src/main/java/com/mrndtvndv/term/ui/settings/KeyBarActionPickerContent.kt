@@ -246,6 +246,9 @@ internal fun ModifierTab(onPick: (KeyBarAction?) -> Unit) {
         PickerActionRow("Alt", "Arms Alt for the next key. Tap again to lock it on.") {
             onPick(KeyBarAction.Alt)
         }
+        PickerActionRow("Right click", "Makes the next tap on the terminal a right click. Tap again to lock it on.") {
+            onPick(KeyBarAction.RightClick)
+        }
         PickerActionRow("Arrows", "Sends arrow keys using the Arrow joystick mode in Keyboard settings.") {
             onPick(KeyBarAction.Joystick)
         }

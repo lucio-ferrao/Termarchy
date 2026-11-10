@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="herdr_shortcut_working">a trabalhar</string>
-    <string name="herdr_shortcut_blocked">à espera</string>
-    <string name="herdr_shortcut_done">terminado</string>
-    <string name="herdr_shortcut_idle">parado</string>
-</resources>

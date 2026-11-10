@@ -192,6 +192,7 @@ fun TerminalCanvas(
             controller = controller,
             metrics = metrics,
             translator = translator,
+            modifierKeys = modifierKeys,
             selectionState = selectionState,
             fontSizeState = fontSizeState,
             imeHost = imeHost,
@@ -212,6 +213,7 @@ private data class TerminalCanvasState(
     val controller: TerminalController,
     val metrics: TerminalMetrics,
     val translator: TerminalInputTranslator,
+    val modifierKeys: ModifierKeyReader,
     val selectionState: TerminalSelectionState,
     val fontSizeState: MutableIntState,
     val imeHost: ImeHost,
@@ -265,7 +267,8 @@ private fun TerminalCanvasLayout(
                 state.selectionState,
                 state.imeHost,
                 state.focusRequester,
-                state.hapticFeedback
+                state.hapticFeedback,
+                state.modifierKeys
             )
 
         val glesSurface = glesTerminalCanvasContent(

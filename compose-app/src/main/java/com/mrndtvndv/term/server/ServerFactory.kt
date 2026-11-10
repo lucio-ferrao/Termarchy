@@ -113,12 +113,14 @@ class ServerFactory(
         )
         server.onDisconnect { herdrScope.cancel() }
         if (herdr != null) herdrScope.launch { runCatching { herdr.start() } }
-        // A launcher shortcut per Herdr pane, kept while connected; they stay after disconnecting.
+        // A launcher shortcut per Herdr pane, kept while connected; they stay after disconnecting, but not the state of
+        // their agents, no longer known.
         if (herdr != null) {
             val shortcuts = HerdrShortcutPublisher(
                 context, config.id, herdrControlSocketPath(config.herdrSocketPath, homeDir), singleServer,
             )
             herdrScope.launch { herdr.state.mapNotNull { it.snapshot }.distinctUntilChanged().collect(shortcuts::publish) }
+            server.onDisconnect { shortcuts.forget() }
         }
         if (focusBridge?.enabled == true) herdrScope.launch { focusBridge.warmUp() }
         return server

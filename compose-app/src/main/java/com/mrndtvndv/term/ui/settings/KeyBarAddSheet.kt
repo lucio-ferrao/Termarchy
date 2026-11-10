@@ -95,6 +95,7 @@ private fun addSheetChoices(query: String): AddSheetChoices {
     val tools = listOf(
         AddTile(KeyBarAction.Ctrl, "Ctrl", "Ctrl"),
         AddTile(KeyBarAction.Alt, "Alt", "Alt"),
+        AddTile(KeyBarAction.RightClick, "Right click", "Right click on the terminal"),
         AddTile(KeyBarAction.Joystick, "Arrows", "Arrow joystick", Icons.Default.OpenWith),
         AddTile(KeyBarAction.Host(KeyBarHostAction.Git), "Git", "Git, Herdr only"),
         AddTile(KeyBarAction.Host(KeyBarHostAction.Sftp), "SFTP", "SFTP, Herdr only"),

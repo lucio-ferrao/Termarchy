@@ -39,9 +39,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import com.mrndtvndv.term.data.prefs.KeyBarAction
 import com.mrndtvndv.term.data.prefs.KeyBarItem
 import com.mrndtvndv.term.ui.components.tintedGlassPill
+import com.mrndtvndv.term.R
 
 @Composable
 internal fun ItemCountHeader(itemCount: Int) {
@@ -160,6 +163,11 @@ internal fun BarChip(item: KeyBarItem, modifier: Modifier = Modifier) {
                 )
                 KeyBarAction.Joystick -> Icon(
                     imageVector = Icons.Default.OpenWith,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                KeyBarAction.RightClick -> Icon(
+                    imageVector = ImageVector.vectorResource(R.drawable.ic_right_click),
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
                 )
