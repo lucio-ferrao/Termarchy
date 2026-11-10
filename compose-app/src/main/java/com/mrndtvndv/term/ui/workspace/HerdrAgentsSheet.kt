@@ -14,15 +14,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -36,22 +33,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.HorizontalSplit
-import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.filled.VerticalSplit
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -80,16 +71,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
-import com.mrndtvndv.processicons.agentIconResource
 import com.mrndtvndv.term.ServerListUiState
 import com.mrndtvndv.term.domain.ServerConfig
+import com.mrndtvndv.term.herdr.agentSummary
 import com.mrndtvndv.term.herdr.herdrTabName
+import com.mrndtvndv.term.herdr.label
 import com.mrndtvndv.term.herdr.paneTitle
 import com.mrndtvndv.term.herdr.HerdrAgentStatus
 import com.mrndtvndv.term.herdr.HerdrPane
@@ -130,6 +126,8 @@ fun HerdrAgentsSidebar(
     val workspaceId = snapshot?.focusedWorkspaceId
     val paneId = snapshot?.focusedPaneId
     val sshServers = serverListState.servers.filter { !it.isLocal }
+    val palette = herdrStatusColors()
+    val font = herdrFont()
 
     fun dismissAndFocus(action: () -> Unit) {
         action()
@@ -138,62 +136,43 @@ fun HerdrAgentsSidebar(
 
     Column(
         modifier = Modifier.fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .background(palette.panel)
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding(),
     ) {
+        // the server, with its agents summed up as herdr does ("0 working · 12 idle"); a tap opens the switcher
         Row(
             modifier = Modifier.fillMaxWidth()
                 .clickable { switcherExpanded = !switcherExpanded }
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Box(
-                modifier = Modifier.size(40.dp).background(
-                    MaterialTheme.colorScheme.primaryContainer,
-                    CircleShape,
-                ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    currentServer.label.firstOrNull()?.uppercase() ?: "S",
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    currentServer.label,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    if (currentServer.isLocal) "Local • Connected" else "@${currentServer.username} • Connected",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                currentServer.label,
+                modifier = Modifier.weight(1f),
+                color = palette.text,
+                fontFamily = font,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                agentSummary(snapshot?.panes.orEmpty().filter { it.agent != null }.map { it.agentStatus }),
+                color = palette.unknown,
+                fontFamily = font,
+                fontSize = 13.sp,
+                maxLines = 1,
+            )
             Icon(
                 if (switcherExpanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
                 contentDescription = if (switcherExpanded) "Collapse server switcher" else "Expand server switcher",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = palette.unknown,
+                modifier = Modifier.size(20.dp),
             )
         }
-
-        val tabCount = snapshot?.tabs?.size ?: 0
-        val workspaceCount = snapshot?.workspaces?.size ?: 0
-        val runningCount = snapshot?.panes?.count {
-            it.agent != null && it.agentStatus == HerdrAgentStatus.Working
-        } ?: 0
-        Text(
-            "$tabCount tabs   $workspaceCount workspaces   $runningCount running",
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
 
         AnimatedVisibility(
             visible = switcherExpanded,
@@ -251,8 +230,6 @@ fun HerdrAgentsSidebar(
             }
         }
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
         state.error?.message?.let {
             Text(it, modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
         }
@@ -289,7 +266,7 @@ fun HerdrAgentsSidebar(
             }
         }
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        HorizontalDivider(color = palette.focusedRow)
         SidebarBottomActions(
             workspaceId = workspaceId,
             paneId = paneId,
@@ -343,7 +320,7 @@ fun HerdrAgentsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = herdrStatusColors().panel,
     ) {
         KeepSheetAboveIme()
         @Composable
@@ -556,6 +533,7 @@ private fun ServerSwitcherRow(
     }
 }
 
+/** The actions under the list, as a line of quiet text like herdr's hints. */
 @Composable
 private fun SidebarBottomActions(
     workspaceId: String?,
@@ -564,62 +542,28 @@ private fun SidebarBottomActions(
     onNewWorkspace: (sourceWorkspaceId: String) -> Unit,
     onSplitPane: (paneId: String, direction: String) -> Unit,
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SidebarActionButton(
-                text = "New tab",
-                icon = Icons.Default.Add,
-                enabled = workspaceId != null,
-                onClick = { workspaceId?.let(onNewTab) },
-            )
-            SidebarActionButton(
-                text = "Workspace",
-                icon = Icons.Default.Add,
-                enabled = workspaceId != null,
-                onClick = { workspaceId?.let(onNewWorkspace) },
-            )
-        }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SidebarActionButton(
-                text = "Split right",
-                icon = Icons.Default.VerticalSplit,
-                enabled = paneId != null,
-                onClick = { paneId?.let { id -> onSplitPane(id, "right") } },
-            )
-            SidebarActionButton(
-                text = "Split down",
-                icon = Icons.Default.HorizontalSplit,
-                enabled = paneId != null,
-                onClick = { paneId?.let { id -> onSplitPane(id, "down") } },
-            )
-        }
+        SidebarTextAction("+ tab", enabled = workspaceId != null) { workspaceId?.let(onNewTab) }
+        SidebarTextAction("+ workspace", enabled = workspaceId != null) { workspaceId?.let(onNewWorkspace) }
+        SidebarTextAction("split right", enabled = paneId != null) { paneId?.let { id -> onSplitPane(id, "right") } }
+        SidebarTextAction("split down", enabled = paneId != null) { paneId?.let { id -> onSplitPane(id, "down") } }
     }
 }
 
 @Composable
-private fun RowScope.SidebarActionButton(
-    text: String,
-    icon: ImageVector,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    FilledTonalButton(
-        onClick = onClick,
-        modifier = Modifier.weight(1f),
-        enabled = enabled,
-        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-            Text(text)
-        }
-    }
+private fun SidebarTextAction(text: String, enabled: Boolean, onClick: () -> Unit) {
+    val palette = herdrStatusColors()
+    Text(
+        text,
+        modifier = Modifier.clickable(enabled = enabled, onClick = onClick).padding(horizontal = 8.dp, vertical = 12.dp),
+        color = if (enabled) palette.subtext else palette.unknown.copy(alpha = 0.5f),
+        fontFamily = herdrFont(),
+        fontSize = 13.sp,
+        maxLines = 1,
+    )
 }
 
 @Composable
@@ -633,36 +577,45 @@ private fun LazyItemScope.WorkspaceGroupItem(
     onClosePane: suspend (HerdrPane) -> Boolean,
 ) {
     val motion = MaterialTheme.motionScheme
+    val palette = herdrStatusColors()
+    val font = herdrFont()
     val headerBackground = if (!expanded && workspace.id == snapshot.focusedWorkspaceId) {
-        MaterialTheme.colorScheme.surfaceContainerHighest
+        palette.focusedRow
     } else {
         Color.Transparent
     }
     Column(modifier = itemMotion()) {
+        HorizontalDivider(color = palette.focusedRow)
+        // the workspace with its agents summed up ("1 working · 2 idle"), also while collapsed
         Row(
             modifier = Modifier.fillMaxWidth().background(headerBackground).clickable(onClick = onToggle)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(workspace.label, modifier = Modifier.weight(1f), maxLines = 1)
-            if (!expanded) {
-                // Collapsed groups still surface their agents, most urgent first.
-                val statuses = snapshot.panes.filter { it.workspaceId == workspace.id && it.agent != null }
-                    .map { it.agentStatus }.toSet()
-                Row(
-                    modifier = Modifier.padding(end = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    listOf(HerdrAgentStatus.Blocked, HerdrAgentStatus.Working, HerdrAgentStatus.Done)
-                        .filter { it in statuses }
-                        .forEach { AgentStatusIndicator(it, agentStatusColor(it)) }
-                }
-            }
-            Text("${workspace.tabCount} tabs", style = MaterialTheme.typography.labelMedium)
+            Text(
+                workspace.label,
+                modifier = Modifier.weight(1f),
+                color = palette.subtext,
+                fontFamily = font,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                agentSummary(snapshot.panes.filter { it.workspaceId == workspace.id && it.agent != null }
+                    .map { it.agentStatus }),
+                color = palette.unknown,
+                fontFamily = font,
+                fontSize = 13.sp,
+                maxLines = 1,
+            )
             Icon(
                 if (expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
                 contentDescription = if (expanded) "Collapse workspace" else "Expand workspace",
+                tint = palette.unknown,
+                modifier = Modifier.size(18.dp),
             )
         }
         // Animate the group height so following workspaces move smoothly while its rows appear.
@@ -706,19 +659,14 @@ private fun HerdrTabGroup(
             if (none { it.terminalId == pane.terminalId }) add(index.coerceAtMost(size), pane)
         }
     }
-    val shape = RoundedCornerShape(12.dp)
-    val groupModifier = if (panes.size > 1) {
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
-            .clip(shape)
-            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), shape)
-    } else {
-        Modifier.fillMaxWidth()
-    }
-    Column(modifier = groupModifier) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         if (panes.isEmpty()) Text(
             tab.label.ifBlank { "Terminal" },
             modifier = Modifier.fillMaxWidth().clickable(onClick = onFocusTab)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(start = 48.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+            color = herdrStatusColors().subtext,
+            fontFamily = herdrFont(),
+            fontSize = 15.sp,
         )
         val tabName = herdrTabName(tab.label)?.let { paneTitle(it, singleServer) }
         panes.forEachIndexed { index, pane ->
@@ -824,42 +772,51 @@ private fun LazyItemScope.itemMotion(): Modifier {
     )
 }
 
+/**
+ * One line per pane, as herdr's sidebar: the state's symbol in its color (the blinking ghost while working), the name,
+ * the agent when it is not Claude, and the state on the right; a pane without an agent only its name.
+ */
 @Composable
 private fun HerdrAgentRowContent(pane: HerdrPane, title: String, onFocus: () -> Unit, onClose: () -> Unit) {
     var menuVisible by remember(pane.terminalId) { mutableStateOf(false) }
+    val palette = herdrStatusColors()
+    val font = herdrFont()
     val statusColor = agentStatusColor(pane.agentStatus)
-    val background = if (pane.focused) {
-        MaterialTheme.colorScheme.surfaceContainerHighest
-    } else {
-        MaterialTheme.colorScheme.surfaceContainerLow
-    }
+    val otherAgent = (pane.displayAgent ?: pane.agent)?.takeIf { it.isNotBlank() && pane.agent != "claude" }
     Box {
         Row(
-            modifier = Modifier.fillMaxWidth().background(background)
+            modifier = Modifier.fillMaxWidth().background(if (pane.focused) palette.focusedRow else palette.panel)
                 .combinedClickable(onClick = onFocus, onLongClick = { menuVisible = true })
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            val icon = agentIconResource(pane.agent)
-            if (icon != null) {
-                Icon(
-                    painterResource(icon), contentDescription = null,
-                    tint = statusColor, modifier = Modifier.size(24.dp),
-                )
-            } else {
-                Icon(
-                    if (pane.agent == null) Icons.Default.Terminal else Icons.Default.SmartToy,
-                    contentDescription = null, tint = statusColor, modifier = Modifier.size(24.dp),
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                (pane.displayAgent ?: pane.agent)?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall)
+            Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                when {
+                    pane.agent == null -> Icon(
+                        Icons.Default.Terminal, contentDescription = null, tint = palette.unknown,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    pane.agentStatus == HerdrAgentStatus.Working -> WorkingGhost(statusColor, Modifier.size(18.dp))
+                    else -> Text(pane.agentStatus.symbol, color = statusColor, fontSize = 16.sp)
                 }
             }
-            if (pane.agent != null) AgentStatusIndicator(pane.agentStatus, statusColor)
+            Text(
+                buildAnnotatedString {
+                    append(title)
+                    otherAgent?.let {
+                        withStyle(SpanStyle(color = palette.unknown, fontWeight = FontWeight.Normal)) { append("  $it") }
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                color = if (pane.focused) palette.text else palette.subtext,
+                fontFamily = font,
+                fontWeight = if (pane.focused) FontWeight.Bold else FontWeight.Normal,
+                fontSize = 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (pane.agent != null) Text(pane.agentStatus.label, color = statusColor, fontFamily = font, fontSize = 13.sp)
         }
         DropdownMenu(
             expanded = menuVisible,
@@ -874,6 +831,15 @@ private fun HerdrAgentRowContent(pane: HerdrPane, title: String, onFocus: () -> 
     }
 }
 
+/** herdr's symbol for a state; working has the blinking ghost instead. */
+private val HerdrAgentStatus.symbol: String
+    get() = when (this) {
+        HerdrAgentStatus.Idle -> "○"
+        HerdrAgentStatus.Done -> "✓"
+        HerdrAgentStatus.Blocked -> "×"
+        HerdrAgentStatus.Working, HerdrAgentStatus.Unknown -> "·"
+    }
+
 @Composable
 private fun agentStatusColor(status: HerdrAgentStatus): Color = with(herdrStatusColors()) {
     when (status) {
@@ -884,24 +850,3 @@ private fun agentStatusColor(status: HerdrAgentStatus): Color = with(herdrStatus
         HerdrAgentStatus.Unknown -> unknown
     }
 }
-
-@Composable
-private fun AgentStatusIndicator(status: HerdrAgentStatus, tint: Color) {
-    when (status) {
-        HerdrAgentStatus.Working -> WorkingGhost(tint, Modifier.size(20.dp))
-        HerdrAgentStatus.Blocked -> Icon(
-            Icons.Default.PanTool,
-            contentDescription = "Needs input",
-            tint = tint,
-            modifier = Modifier.size(20.dp),
-        )
-        HerdrAgentStatus.Done -> Icon(
-            Icons.Default.CheckCircle,
-            contentDescription = "Done",
-            tint = tint,
-            modifier = Modifier.size(20.dp),
-        )
-        HerdrAgentStatus.Idle, HerdrAgentStatus.Unknown -> Unit
-    }
-}
-
