@@ -77,7 +77,7 @@ class DeviceSshKey(private val context: Context) {
 
     /** The line for the server's ~/.ssh/authorized_keys. */
     fun publicKeyLine(): String =
-        "$KEY_TYPE ${Base64.encodeToString(publicKeyBlob(), Base64.NO_WRAP)} ecto@${Build.MODEL.replace(' ', '-')}"
+        "$KEY_TYPE ${Base64.encodeToString(publicKeyBlob(), Base64.NO_WRAP)} termarchy@${Build.MODEL.replace(' ', '-')}"
 
     /** Why the last signature was not made, for the connection error; null when the fingerprint was just refused. */
     var signFailure: String? = null

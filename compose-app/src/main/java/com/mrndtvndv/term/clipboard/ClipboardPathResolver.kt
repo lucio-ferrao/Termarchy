@@ -8,7 +8,7 @@ import java.io.File
 object ClipboardPathResolver {
     private val homePrefixes = listOf("%userprofile%", "\$env:userprofile", "\$home")
     private val windowsDrivePath = Regex("^/?[A-Za-z]:(/.*)?\\z")
-    const val DEFAULT_IMAGE_CACHE_DIR = "~/.cache/termux-ghostty"
+    const val DEFAULT_IMAGE_CACHE_DIR = "~/.cache/termarchy"
 
     /**
      * Resolves the remote target directory from custom user input.

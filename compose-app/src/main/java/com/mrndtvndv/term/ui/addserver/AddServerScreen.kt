@@ -2,6 +2,8 @@ package com.mrndtvndv.term.ui.addserver
 
 import android.os.Build
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -59,6 +61,9 @@ fun AddServerScreen(
         Column(
             modifier = Modifier
                 .padding(padding)
+                // the keyboard takes the bottom of the screen: the form scrolls above it, so Save stays reachable
+                .consumeWindowInsets(padding)
+                .imePadding()
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
