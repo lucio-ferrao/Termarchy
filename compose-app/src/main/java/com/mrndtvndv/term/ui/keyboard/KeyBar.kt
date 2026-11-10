@@ -344,7 +344,7 @@ fun ArrowJoystick(mode: ArrowJoystickMode, onArrow: (ArrowDirection) -> Unit, mo
 // The height of the suggestion strip of the Keyarchy keyboard (config_suggestions_strip_height), right under the bar.
 private val BarHeight = 40.dp
 // The Keyarchy key at the start of its strip (1dp margin, 36dp wide: config_suggestions_strip_edge_key_width), so the
-// Ecto button sits right above it.
+// Termarchy button sits right above it.
 private val HomeButtonStart = 1.dp
 private val HomeButtonWidth = 36.dp
 
@@ -487,7 +487,7 @@ private fun ForwardKey(forward: PortForward, onStop: (PortForward) -> Unit) {
 }
 
 /**
- * The button that opens the tabs (or Herdr's agents) as the first key of the key bar: Ecto's icon, flat in the key
+ * The button that opens the tabs (or Herdr's agents) as the first key of the key bar: Termarchy's icon, flat in the key
  * color, with [badge] over it (a tab count, a status dot).
  */
 @Composable

@@ -21,7 +21,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-/** Opens the tabs grid. Shows the tab count as a badge over a fixed tabs icon, or over Ecto's in the key bar. */
+/** Opens the tabs grid. Shows the tab count as a badge over a fixed tabs icon, or over Termarchy's in the key bar. */
 @Composable
 fun TabsButton(tabCount: Int, onOpenTabs: () -> Unit) {
     if (LocalInKeyboardRow.current) {

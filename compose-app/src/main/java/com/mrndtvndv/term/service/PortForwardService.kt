@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
  * Port forwards asked by the Keyarchy keyboard ("ssh olivais -L 3000"), through a [Messenger]. Only Keyarchy may ask:
  * the caller is the package of the UID Android stamps on each message ([Message.sendingUid]), which a caller cannot
  * forge. A request names a saved server, or none for the connected one (or the only one saved); a server not connected
- * yet is connected by opening Ecto, where the key asks for the fingerprint. The reply says whether it worked.
+ * yet is connected by opening Termarchy, where the key asks for the fingerprint. The reply says whether it worked.
  */
 class PortForwardService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -42,7 +42,7 @@ class PortForwardService : Service() {
                 val replyTo = message.replyTo
                 val callers = packageManager.getPackagesForUid(message.sendingUid)
                 if (!isAllowedCaller(callers)) {
-                    reply(replyTo, false, "Only Keyarchy may ask Ecto for port forwards")
+                    reply(replyTo, false, "Only Keyarchy may ask Termarchy for port forwards")
                     return
                 }
                 val arguments = message.data.getString(KEY_ARGUMENTS).orEmpty()
@@ -85,7 +85,7 @@ class PortForwardService : Service() {
         }
     }
 
-    /** The server [name] names (else the connected one, else the only one saved), connected through Ecto if needed. */
+    /** The server [name] names (else the connected one, else the only one saved), connected through Termarchy if needed. */
     private suspend fun connectedServer(name: String?): Server {
         val coordinator = sessionManager.coordinator
         val saved = (sessionManager.serverRepository.load() as? SavedServersLoad.Loaded)?.servers.orEmpty()
@@ -132,7 +132,7 @@ class PortForwardService : Service() {
         private const val CONNECT_WAIT_MS = 90_000
         private const val POLL_MS = 250
 
-        /** Opens Ecto connected to the saved server [serverId], as "ssh <name>" does. */
+        /** Opens Termarchy connected to the saved server [serverId], as "ssh <name>" does. */
         fun connectIntent(context: Context, serverId: String): Intent =
             Intent(context, MainActivity::class.java)
                 .setAction(MainActivity.ACTION_CONNECT)

@@ -304,7 +304,7 @@ fun HerdrSessionRoute(
                 agentsSheetVisible = true
             }
         }
-        // in the key bar: Ecto's icon as its first key
+        // in the key bar: Termarchy's icon as its first key
         if (LocalInKeyboardRow.current) {
             KeyBarHomeButton(description = buttonDescription, onClick = openAgents) {
                 statusDotColor?.let { color ->

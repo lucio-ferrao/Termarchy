@@ -69,7 +69,7 @@ Config files:
 
 ## Core Behaviors to Preserve
 
-### Workspaces and tabs (Ecto)
+### Workspaces and tabs (Termarchy)
 - A workspace belongs to one server and has a root dir; its tabs (Terminal, SFTP, Git, Viewer) live in `workspaces.json` (`compose-app/.../workspace/`).
 - Each SFTP tab owns its directory (`Tab.Sftp.dir`). The app never overwrites the user's manual navigation.
 - Closing a terminal is always `TerminalSession.close()` before `SshShellChannel.close()`: the channel close frees the native shell handle.

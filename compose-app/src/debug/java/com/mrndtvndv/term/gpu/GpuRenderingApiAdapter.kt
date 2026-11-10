@@ -16,7 +16,7 @@ import com.termux.terminal.compose.gpu.GlesTerminalVisualConfig
 import com.termux.terminal.compose.gpu.rememberGlesTerminalSurface
 
 /**
- * The only Ecto call site that depends on the concurrent GPU API.
+ * The only Termarchy call site that depends on the concurrent GPU API.
  *
  * The laboratory deliberately keeps this adapter tiny so the fake backend and
  * scene matrix do not depend on EGL, GL threads, or renderer internals.

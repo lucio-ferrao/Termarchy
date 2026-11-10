@@ -41,9 +41,11 @@ The Customization settings cover the wallpaper, cursor trail, effect frame rate,
 
 Choosing a wallpaper copies the image to `~/.termux/wallpaper`, and choosing a font copies it to `~/.termux/font.ttf`. Removing or resetting either one deletes the file.
 
-## Ecto (`compose-app`)
+## Termarchy (`compose-app`)
 
-A vibe coding companion for Android — an SSH client with Herdr integration and a Ghostty terminal backend, built as a separate Jetpack Compose app (`com.mrndtvndv.term`).
+It was called Ecto until November 2026.
+
+A vibe coding companion for Android — an SSH client with Herdr integration and a Ghostty terminal backend, built as a separate Jetpack Compose app (`org.ferrao.termarchy`; code in `com.mrndtvndv.term`).
 
 ### Screenshots
 
@@ -67,14 +69,15 @@ A vibe coding companion for Android — an SSH client with Herdr integration and
 
 ### This fork
 
-[lucio-ferrao/termux-ghostty](https://github.com/lucio-ferrao/termux-ghostty) (branch `dev`) adds to Ecto:
+[lucio-ferrao/Termarchy](https://github.com/lucio-ferrao/Termarchy) (branch `dev`) adds to Termarchy:
 
 - **Keys that never leave the phone** — SSH authenticates only with an ECDSA P-256 key made in the Android Keystore (StrongBox where there is one), not exportable, each use confirmed with the fingerprint; no passwords. The server's host key is shown (SHA-256) and confirmed on the first connection, and a changed one is refused before anything is sent. App data is not backed up.
-- **Herdr** — Each herdr pane is a dynamic shortcut while the server is connected, named by its herdr tab (and its own title when two share a tab; a tab with only herdr's number keeps the title), as are the rows of the agents list, with the agent's state, opening Ecto on that pane, so a launcher like [Keyarchy](https://github.com/lucio-ferrao/Keyarchy) lists them. Android keeps 15: the most recent, those whose agent works or waits for input first, then by when their agent stopped (from `agent_status_since` of the [herdr fork](https://github.com/lucio-ferrao/herdr), unknown, so old, until the agent's state first changes after the server starts), a time also given to the launcher in the shortcut's extras. Agent states use herdr's colors (Catppuccin), in the agents list and on the button's dot. The full-UI tab follows herdr's focused pane. No notification when an agent finishes, only when one needs attention. `~/.local/bin` is in the PATH of remote commands, where herdr is usually installed.
+- **Herdr** — Each herdr pane is a dynamic shortcut while the server is connected, named by its herdr tab (and its own title when two share a tab; a tab with only herdr's number keeps the title), as are the rows of the agents list, with the agent's state, opening Termarchy on that pane, so a launcher like [Keyarchy](https://github.com/lucio-ferrao/Keyarchy) lists them. Android keeps 15: the most recent, those whose agent works or waits for input first, then by when their agent stopped (from `agent_status_since` of the [herdr fork](https://github.com/lucio-ferrao/herdr), unknown, so old, until the agent's state first changes after the server starts), a time also given to the launcher in the shortcut's extras. Agent states use herdr's colors (Catppuccin), in the agents list and on the button's dot. The full-UI tab follows herdr's focused pane. No notification when an agent finishes, only when one needs attention. `~/.local/bin` is in the PATH of remote commands, where herdr is usually installed.
 - **The keyboard knows what runs** — Each tab tells the keyboard, in `EditorInfo.privateImeOptions` (`org.ferrao.homekey.context=agent:claude`, `shell:bash`, `fullscreen:vim`), so [Keyarchy](https://github.com/lucio-ferrao/Keyarchy) types prose for an agent and commands for a shell. When the program reads a password (herdr's `input_mode`, from the [herdr fork](https://github.com/lucio-ferrao/herdr/tree/password-input)), the field becomes a password field: nothing suggested or learned. In a shell, the server's commands (`compgen -c`) and the files and folders of the pane's folder go to the keyboard in `EditorInfo.extras`, for its suggestions.
-- **Key bar as a keyboard row** — Full width and as tall as Keyarchy's suggestion strip, in its dark colors, with the tabs button (Ecto's ghost) on the left, aligned with Keyarchy's key. The keyboard opens whenever you come back to a terminal.
+- **Key bar as a keyboard row** — Full width and as tall as Keyarchy's suggestion strip, in its dark colors, with the tabs button (Termarchy's ghost) on the left, aligned with Keyarchy's key. The keyboard opens whenever you come back to a terminal.
 - **JetBrains Mono** — The default font, regular and bold, as in Ghostty, with its ligatures (neighbouring cells are shaped together and drawn by glyph). Noto Sans Symbols 2 and Symbols Nerd Font Mono fill in symbols and icons (`eza --icons`). An imported font still wins.
-- **Port forwards** — ssh's `-L` and `-R` on a connection, with short forms (`-L 3000` is `-L 3000:localhost:3000`), asked from [Keyarchy](https://github.com/lucio-ferrao/Keyarchy)'s launcher (`ssh olivais -R 5555`; only Keyarchy may ask, checked by the UID Android stamps on the request). Each active forward is a key at the end of the key bar ("L3000", "R5555") with a menu to stop it, and the connection notification lists them. `ssh olivais` alone opens Ecto connected to that saved server.
+- **Port forwards** — ssh's `-L` and `-R` on a connection, with short forms (`-L 3000` is `-L 3000:localhost:3000`), asked from [Keyarchy](https://github.com/lucio-ferrao/Keyarchy)'s launcher (`ssh olivais -R 5555`; only Keyarchy may ask, checked by the UID Android stamps on the request). Each active forward is a key at the end of the key bar ("L3000", "R5555") with a menu to stop it, and the connection notification lists them. `ssh olivais` alone opens Termarchy connected to that saved server.
+- **Icon** — A ghost without eyes, a line in their place, its hem the crown of three `^` of [Keyarchy](https://github.com/lucio-ferrao/Keyarchy), white on black, as the bubble of [MatriX](https://github.com/lucio-ferrao/matrix).
 - **One server, shorter titles** — With a single saved server, pane, tab and shortcut titles drop the `user@host:`.
 
 ## Status

@@ -7,7 +7,7 @@ import androidx.compose.ui.graphics.luminance
 
 /**
  * The agent status colors of herdr's default theme (Catppuccin Mocha, Latte on a light app theme), so an agent shows
- * the same color in the Ecto as in herdr's sidebar.
+ * the same color in Termarchy as in herdr's sidebar.
  */
 internal class HerdrStatusColors(
     val working: Color,

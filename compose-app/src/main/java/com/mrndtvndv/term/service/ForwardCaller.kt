@@ -1,6 +1,6 @@
 package com.mrndtvndv.term.service
 
-/** The packages of the Keyarchy keyboard (release and debug), the only app that may ask Ecto for port forwards. */
+/** The packages of the Keyarchy keyboard (release and debug), the only app that may ask Termarchy for port forwards. */
 internal val FORWARD_CALLERS = setOf("org.ferrao.homekey", "org.ferrao.homekey.debug")
 
 /**

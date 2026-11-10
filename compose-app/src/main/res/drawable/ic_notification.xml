@@ -1,23 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Status-bar small icon for OS notifications dispatched by the terminal.
-  White monochrome ghost silhouette (matches the adaptive-icon monochrome layer).
-  Small icons must be white-on-transparent; the full-color launcher is used as
-  the large icon in the notification shade instead.
--->
+<!-- Status-bar small icon: the ghost of the launcher icon, white on transparent, with a thicker line to read at 24 dp -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:fillType="evenOdd"
-        android:pathData="M 34,48 C 34,25 74,25 74,48 L 74,56 C 78,56 82,59 82,62 C 82,65 78,66 74,65 L 74,75 Q 67,70 60,75 Q 54,70 48,75 Q 41,70 34,75 L 34,65 C 30,66 26,65 26,62 C 26,59 30,56 34,56 Z
-                          M 41,42.6 L 48.4,48 L 41,53.4 L 39,52 L 44.6,48 L 39,44 Z
-                          M 61,50.6 h 6 v 2.8 h -6 Z
-                          M 54,59.1 L 48,64 L 54,68.9 L 55.3,68 L 50.8,64 L 55.3,60 Z
-                          M 59,59.1 L 53,64 L 59,68.9 L 60.3,68 L 55.8,64 L 60.3,60 Z" />
-
+    android:viewportWidth="50"
+    android:viewportHeight="50">
+    <group android:translateX="-29" android:translateY="-34">
+        <path
+            android:pathData="M36,54 C36,34 72,34 72,54 L72,78 L66.71,67.94 L61.41,78 L59.29,78 L54,63.18 L48.71,78 L46.59,78 L41.29,67.94 L36,78 Z"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="4.4"
+            android:strokeLineJoin="round"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M45,52 H63"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="4.4"
+            android:strokeLineCap="round" />
+    </group>
 </vector>

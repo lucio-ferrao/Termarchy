@@ -94,7 +94,7 @@ private fun GpuRenderingLab() {
                     .padding(8.dp)
             ) {
                 Text(
-                    text = "Ecto GLES terminal rendering laboratory",
+                    text = "Termarchy GLES terminal rendering laboratory",
                     style = MaterialTheme.typography.titleMedium,
                     color = Color(0xFFE6EDF3)
                 )

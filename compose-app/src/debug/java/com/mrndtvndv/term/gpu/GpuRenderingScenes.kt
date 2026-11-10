@@ -79,7 +79,7 @@ internal object GpuLabStyles {
             ((background.toLong() and 0xffffffL) shl 16)
 }
 
-/** Fixed scene matrix for the debug-only Ecto renderer laboratory. */
+/** Fixed scene matrix for the debug-only Termarchy renderer laboratory. */
 internal object GpuLabScenes {
     val all: List<GpuLabScene> = listOf(
         GpuLabScene(

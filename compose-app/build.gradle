@@ -15,7 +15,7 @@ androidComponents {
             def nameTag = buildTypeName == "debug" ? "debug" : "release"
             def apkVersionTag = System.getenv("TERMUX_APK_VERSION_TAG") ?: ""
             def abiSuffix = variant.flavorName == "arm64" ? "-arm64-v8a" : "-universal"
-            def filename = "ecto_" + (apkVersionTag ? apkVersionTag : nameTag) + abiSuffix + ".apk"
+            def filename = "termarchy_" + (apkVersionTag ? apkVersionTag : nameTag) + abiSuffix + ".apk"
             output.outputFileName.set(filename)
         }
     }
@@ -46,9 +46,9 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.mrndtvndv.term"
+        applicationId "org.ferrao.termarchy"
         minSdk project.properties.minSdkVersion.toInteger()
-        // the Termux app stays at 28 (it runs programs from its data folder); Ecto does not, and Play Protect blocks
+        // the Termux app stays at 28 (it runs programs from its data folder); Termarchy does not, and Play Protect blocks
         // apps that target an old Android
         targetSdk 36
         versionCode 28

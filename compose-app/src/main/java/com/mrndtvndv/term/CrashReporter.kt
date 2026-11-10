@@ -36,7 +36,7 @@ class CrashReporter(private val context: Context) {
         val stackTrace = StringWriter()
         throwable.printStackTrace(PrintWriter(stackTrace))
         return """
-            Ecto crash report
+            Termarchy crash report
             Time: $timestamp
             Thread: ${thread.name}
             Breadcrumbs: ${CrashBreadcrumbs.snapshot()}
