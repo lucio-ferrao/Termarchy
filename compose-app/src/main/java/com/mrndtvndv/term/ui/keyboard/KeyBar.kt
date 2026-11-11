@@ -298,7 +298,7 @@ private fun ArrowKnob(knob: Animatable<Offset, AnimationVector2D>) {
         Modifier
             .offset { IntOffset(knob.value.x.roundToInt(), knob.value.y.roundToInt()) }
             .size(JoystickKnobSize)
-            .background(MaterialTheme.colorScheme.primary, CircleShape),
+            .background(MaterialTheme.colorScheme.onSurface, CircleShape),
     )
 }
 

@@ -13,7 +13,7 @@
         android:strokeColor="#FFFFFFFF"
         android:strokeWidth="2" />
     <path
-        android:pathData="M12,2V10M6,10H18"
+        android:pathData="M6,10H18"
         android:strokeColor="#FFFFFFFF"
         android:strokeWidth="2" />
 </vector>
