@@ -55,3 +55,6 @@ trace_processor
 
 # direnv
 .direnv/
+
+# Claude Code
+.claude/
