@@ -2,7 +2,6 @@ package com.mrndtvndv.term.ui.workspace
 
 import android.graphics.BlurMaskFilter
 import android.graphics.Paint
-import androidx.activity.BackEventCompat
 import androidx.activity.ExperimentalActivityApi
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
@@ -97,11 +96,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlin.math.roundToInt
 
-private enum class SidebarSide(val dir: Float, val originX: Float, val alignment: Alignment) {
-    Left(dir = +1f, originX = 0f, alignment = Alignment.CenterStart),
-    Right(dir = -1f, originX = 1f, alignment = Alignment.CenterEnd),
-}
-
 private const val SidebarRevealFraction = 0.786f
 private const val SidebarParallaxRatio = 0.30f
 private const val CardMinScale = 0.90f
@@ -170,7 +164,6 @@ fun HerdrSessionRoute(
     }
     var sidebarOpen by rememberSaveable { mutableStateOf(false) }
     var agentsSheetVisible by rememberSaveable { mutableStateOf(false) }
-    var sidebarSide by rememberSaveable { mutableStateOf(SidebarSide.Left) }
     val revealAnimatable = remember { Animatable(0f) }
     val animationsEnabled = LocalAnimationsEnabled.current
     val isSidebarVisible by remember {
@@ -246,18 +239,9 @@ fun HerdrSessionRoute(
         enabled = settings.agentsSidebar && activeTabId == tab.id && sheet == null &&
             !sidebarOpen && !agentsSheetVisible,
     ) { progressFlow ->
-        var detectedEdge: Int? = null
+        // the sidebar always opens on the left, whichever edge the back gesture came from
         try {
-            progressFlow.collect { backEvent ->
-                if (detectedEdge == null) {
-                    detectedEdge = backEvent.swipeEdge
-                    sidebarSide = when (backEvent.swipeEdge) {
-                        BackEventCompat.EDGE_RIGHT -> SidebarSide.Right
-                        BackEventCompat.EDGE_LEFT -> SidebarSide.Left
-                        else -> sidebarSide
-                    }
-                }
-            }
+            progressFlow.collect { }
             sheetRequests.cancel()
             appViewModel.refreshHerdrContext(serverId)
             openSidebar()
@@ -365,10 +349,10 @@ fun HerdrSessionRoute(
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(SidebarRevealFraction)
-                    .align(sidebarSide.alignment)
+                    .align(Alignment.CenterStart)
                     .graphicsLayer {
                         val progress = revealAnimatable.value
-                        translationX = -sidebarSide.dir * (1f - progress) *
+                        translationX = -(1f - progress) *
                             (maxOffsetPx * SidebarParallaxRatio)
                     },
             ) {
@@ -422,8 +406,8 @@ fun HerdrSessionRoute(
                     val scale = 1f - (1f - CardMinScale) * progress
                     scaleX = scale
                     scaleY = scale
-                    transformOrigin = TransformOrigin(sidebarSide.originX, 0.5f)
-                    translationX = sidebarSide.dir * progress * maxOffsetPx
+                    transformOrigin = TransformOrigin(0f, 0.5f)
+                    translationX = progress * maxOffsetPx
                 },
         ) {
             WorkspacePager(
@@ -474,7 +458,6 @@ fun HerdrSessionRoute(
             }
             if (isSidebarVisible) {
                 CardFrameOverlay(
-                    side = sidebarSide,
                     progressProvider = { revealAnimatable.value },
                     maskColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 )
@@ -550,17 +533,14 @@ fun HerdrSessionRoute(
 
 @Composable
 private fun CardFrameOverlay(
-    side: SidebarSide,
     progressProvider: () -> Float,
     maskColor: Color,
 ) {
-    val currentSide by rememberUpdatedState(side)
     val currentMaskColor by rememberUpdatedState(maskColor)
     Spacer(
         modifier = Modifier
             .fillMaxSize()
             .drawWithCache {
-                val activeSide = currentSide
                 val activeMaskColor = currentMaskColor
                 val cornerRadiusPx = CardMaxCornerRadius.toPx()
                 val cardRect = Rect(0f, 0f, size.width, size.height)
@@ -577,7 +557,7 @@ private fun CardFrameOverlay(
                 val bitmapHeight = (size.height * ShadowBitmapScale).roundToInt().coerceAtLeast(1)
                 val scaledRadius = cornerRadiusPx * ShadowBitmapScale
                 val scaledBlur = CardShadowBlurRadius.toPx() * ShadowBitmapScale
-                val scaledOffsetX = activeSide.dir * CardShadowOffsetX.toPx() * ShadowBitmapScale
+                val scaledOffsetX = CardShadowOffsetX.toPx() * ShadowBitmapScale
                 val shadowBitmap = createCardShadowBitmap(
                     bitmapWidth = bitmapWidth,
                     bitmapHeight = bitmapHeight,
