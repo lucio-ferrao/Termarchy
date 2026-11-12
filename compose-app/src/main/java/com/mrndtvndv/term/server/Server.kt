@@ -4,6 +4,7 @@ import com.mrndtvndv.term.domain.ServerConfig
 import com.mrndtvndv.term.domain.SftpClient
 import com.mrndtvndv.term.herdr.FocusBridgeClient
 import com.mrndtvndv.term.herdr.HerdrControlClient
+import com.mrndtvndv.term.skiff.SkiffClient
 import com.mrndtvndv.term.domain.SshSession
 import com.mrndtvndv.term.domain.SshShellChannel
 import com.termux.terminal.TerminalSession
@@ -30,6 +31,8 @@ class Server(
     val herdr: HerdrControlClient? = null,
     /** Pane focus through the optional Herdr helper; exists while Herdr is on, but is idle until opted in. */
     val focusBridge: FocusBridgeClient? = null,
+    /** The live list of skiff sessions. Closed before the SSH session on disconnect. */
+    val skiff: SkiffClient? = null,
 ) {
     private val _terminals = MutableStateFlow<Map<String, TerminalEntry>>(emptyMap())
 
@@ -57,6 +60,15 @@ class Server(
     /** False once the SSH connection died. Always true for local. */
     val isAlive: Boolean
         get() = sshSession?.isAlive ?: true
+
+    /** Tabs attached to skiff sessions. Main thread only. */
+    private val skiffTabs = mutableSetOf<String>()
+
+    internal fun markSkiffTab(tabId: String) {
+        skiffTabs += tabId
+    }
+
+    fun isSkiffTab(tabId: String): Boolean = tabId in skiffTabs
 
     internal fun putTerminal(tabId: String, session: TerminalSession, channel: SshShellChannel?) {
         channels[tabId] = channel
@@ -95,6 +107,7 @@ class Server(
     fun disconnect() {
         disconnected = true
         herdr?.close()
+        skiff?.close()
         focusBridge?.close()
         portForwards?.close()
         val actions = disconnectActions.toList()

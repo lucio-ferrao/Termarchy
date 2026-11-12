@@ -201,6 +201,8 @@ sealed interface Tab {
         val name: String? = null,
         val cwd: String,
         val herdrTerminal: HerdrTerminalRef? = null,
+        /** The skiff session this tab attaches to; the session outlives the tab. */
+        val skiffSession: String? = null,
     ) : Tab
 
     /**

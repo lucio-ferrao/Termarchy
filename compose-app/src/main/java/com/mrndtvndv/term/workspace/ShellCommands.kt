@@ -25,6 +25,13 @@ fun herdrAttachCommand(terminalId: String, controlSocketPath: String): String = 
         "exec herdr terminal attach ${shellQuote(terminalId)}",
 )
 
+/** Attaches to the skiff session [name] on the server, creating it if needed. Closing the tab only detaches. */
+fun skiffOpenCommand(name: String): String = loginScript("exec skiff open ${shellQuote(name)}")
+
+/** A skiff command, for its exit status and output. */
+fun skiffCommand(vararg args: String): String =
+    loginScript("exec skiff " + args.joinToString(" ") { shellQuote(it) })
+
 /**
  * Herdr's normal full UI on the persistent session, on the configured control socket. Unlike [herdrAttachCommand],
  * it launches the normal frontend rather than attaching a single pane or requesting takeover.

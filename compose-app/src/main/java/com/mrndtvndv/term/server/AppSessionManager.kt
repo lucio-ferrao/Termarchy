@@ -304,6 +304,8 @@ class AppSessionManager private constructor(context: Context) : AppSessionManage
      * notifications are delivered separately through Herdr's semantic endpoint message.
      */
     fun handleTerminalNotification(title: String?, body: String?, location: SessionLocation?) {
+        // A skiff session's state is on its card; in front, its agent's own notices would only cover the terminal.
+        val skiffTab = location?.let { (serverId, tabId) -> coordinator.getServer(serverId)?.isSkiffTab(tabId) } == true
         val destination = location?.let { (serverId, tabId) ->
             val server = coordinator.getServer(serverId)
             val socket = server?.let { herdrControlSocketPath(it.config.herdrSocketPath, it.homeDir) }.orEmpty()
@@ -312,12 +314,18 @@ class AppSessionManager private constructor(context: Context) : AppSessionManage
             ) return
             notificationDestination(serverId, tabId, socket)
         }
-        deliverTerminalNotification(title, body, destination)
+        deliverTerminalNotification(title, body, destination, inApp = !skiffTab)
     }
 
-    private fun deliverTerminalNotification(title: String?, body: String?, destination: NotificationDestination?) {
+    private fun deliverTerminalNotification(
+        title: String?,
+        body: String?,
+        destination: NotificationDestination?,
+        inApp: Boolean = true,
+    ) {
         val host = hostRef?.get()
         if (host != null && host.isAtLeast(Lifecycle.State.RESUMED)) {
+            if (!inApp) return
             Log.i("NotifRoute", "deliver in-app destination=$destination")
             host.showInAppNotification(title, body, destination)
         } else {

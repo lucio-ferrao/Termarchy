@@ -35,6 +35,8 @@ import com.mrndtvndv.term.AppViewModel
 import com.mrndtvndv.term.data.prefs.AppSettings
 import com.mrndtvndv.term.data.prefs.KeyBarHostAction
 import com.mrndtvndv.term.herdr.HerdrState
+import com.mrndtvndv.term.skiff.SkiffSessionState
+import com.mrndtvndv.term.skiff.SkiffState
 import com.mrndtvndv.term.herdr.KeyboardContext
 import com.mrndtvndv.term.herdr.keyboardContextOf
 import com.mrndtvndv.term.workspace.isHerdrFullUiTab
@@ -84,6 +86,14 @@ fun TerminalTab(
         }
     }
     val passwordInput = herdrPane?.passwordInput == true
+    // A skiff session on screen has been seen: its finished agent stops being "ready".
+    val skiff = appViewModel.getServer(serverId)?.skiff
+    val skiffState by (skiff?.state ?: flowOf(SkiffState())).collectAsStateWithLifecycle(initialValue = SkiffState())
+    val skiffReady = tab.skiffSession != null &&
+        skiffState.sessions.any { it.name == tab.skiffSession && it.state == SkiffSessionState.Ready }
+    LaunchedEffect(isActive, skiffReady) {
+        if (isActive && skiffReady && tab.skiffSession != null) skiff?.seen(tab.skiffSession)
+    }
     // What runs in the pane, for the keyboard: its agent, else the program in its foreground (herdr reports changes).
     val keyboardContext = if (tab.herdrTerminal == null && !fullUi) {
         KeyboardContext.PLAIN_SHELL

@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import android.util.Log
+import com.mrndtvndv.term.skiff.shownName
+import com.mrndtvndv.term.skiff.skiffSessionId
 import com.mrndtvndv.term.domain.HostKeyException
 import com.mrndtvndv.term.domain.ServerConfig
 import com.mrndtvndv.term.herdr.FocusBridgeMaintenance
@@ -47,6 +49,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 
 data class ServerListUiState(
@@ -569,6 +572,103 @@ class AppViewModel(
         repository.openTab(workspaceId, tab)
     }
 
+    /** Shows the tab of skiff session [name], opening one when this workspace has none. */
+    private fun openSkiffSession(workspaceId: String, name: String) {
+        val workspace = workspaceOf(workspaceId) ?: return
+        val open = workspace.tabs.firstOrNull { it is Tab.Terminal && it.skiffSession == name }
+        if (open != null) {
+            activateTab(open.id)
+            return
+        }
+        navigationIntent++
+        repository.openTab(workspaceId, Tab.Terminal(newId(), name = name, cwd = workspace.root, skiffSession = name))
+    }
+
+    /**
+     * Creates a skiff session called [title] and opens it; the session starts with its tab. Its zmx name comes from
+     * the title and only identifies it.
+     */
+    fun newSkiffSession(workspaceId: String, title: String) {
+        val workspace = workspaceOf(workspaceId) ?: return
+        val skiff = getServer(workspace.serverId)?.skiff ?: return
+        val taken = skiff.state.value.sessions.mapTo(mutableSetOf()) { it.name }
+        val name = skiffSessionId(title, taken)
+        viewModelScope.launch {
+            if (title != name) skiff.rename(name, title)
+            openSkiffSession(workspaceId, name)
+        }
+    }
+
+    /**
+     * Gives every skiff session on the server a tab in [workspaceId] and connects it, and drops the tabs of sessions
+     * that ended.
+     */
+    fun syncSkiffTabs(workspaceId: String, sessions: List<String>) {
+        val workspace = workspaceOf(workspaceId) ?: return
+        val tabs = workspace.tabs.filterIsInstance<Tab.Terminal>().filter { it.skiffSession != null }
+        val open = tabs.mapNotNullTo(mutableSetOf()) { it.skiffSession }
+        sessions.filterNot { it in open }.forEach { name ->
+            repository.openTab(
+                workspaceId,
+                Tab.Terminal(newId(), name = name, cwd = workspace.root, skiffSession = name),
+                activate = false,
+            )
+        }
+        tabs.filter { it.skiffSession !in sessions }.forEach { removeTab(workspace, it) }
+        // every session connected at once, not when first shown; opens already under way are shared
+        val server = getServer(workspace.serverId) ?: return
+        val unconnected = workspaceOf(workspaceId)?.tabs.orEmpty().filterIsInstance<Tab.Terminal>().filter {
+            it.skiffSession in sessions && server.terminals.value[it.id]?.running != true
+        }
+        viewModelScope.launch {
+            unconnected.forEach { tab ->
+                sessionManager.openTerminal(workspace.serverId, tab).onSuccess { sizeLikeShown(server, it) }
+            }
+        }
+    }
+
+    /**
+     * Starts the terminal of a session nobody has shown yet at the size of one on screen. Until it has a size it
+     * keeps no screen and answers none of its program's queries, and the server's terminal stays at 80x24.
+     */
+    private suspend fun sizeLikeShown(server: Server, session: TerminalSession) {
+        if (session.hasActiveTerminalBackend()) return
+        var shown: TerminalSession? = null
+        withTimeoutOrNull(SHOWN_TERMINAL_WAIT_MILLIS) {
+            while (shown == null) {
+                shown = server.terminals.value.values.map { it.session }
+                    .firstOrNull { it !== session && it.hasActiveTerminalBackend() && it.columns > 0 }
+                if (shown == null) delay(100)
+            }
+        }
+        val size = shown ?: return
+        if (session.hasActiveTerminalBackend()) return
+        // the first call starts the terminal, the second tells the server its size
+        repeat(2) { session.updateSize(size.columns, size.rows, size.cellWidthPixels, size.cellHeightPixels) }
+    }
+
+    /** Names skiff session [name] (and the Claude conversation in it) and puts it in [space], where they changed. */
+    fun updateSkiffSession(serverId: String, name: String, title: String, space: String?) {
+        val skiff = getServer(serverId)?.skiff ?: return
+        val session = skiff.state.value.sessions.firstOrNull { it.name == name } ?: return
+        viewModelScope.launch {
+            if (title != session.shownName) skiff.rename(name, title.takeIf { it != name })
+            if (space != session.space) skiff.move(name, space)
+        }
+    }
+
+    /** Puts skiff session [name] in [space]; null leaves it without one. */
+    fun moveSkiffSession(serverId: String, name: String, space: String?) {
+        val skiff = getServer(serverId)?.skiff ?: return
+        viewModelScope.launch { skiff.move(name, space) }
+    }
+
+    /** Ends the session on the server; its tab goes with it when the list no longer has it. */
+    fun endSkiffSession(serverId: String, name: String) {
+        val skiff = getServer(serverId)?.skiff ?: return
+        viewModelScope.launch { skiff.kill(name) }
+    }
+
     fun openTerminalHere(dir: String) {
         val workspaceId = navigator.currentWorkspaceId ?: return
         val workspace = workspaceOf(workspaceId) ?: return
@@ -591,6 +691,16 @@ class AppViewModel(
         val tab = workspace.tabs.firstOrNull { it.id == tabId } ?: return
         // The Herdr session terminal stays open: it is the server's session, not a local tab to close.
         if (isHerdrFullUiTab(tab)) return
+        // A skiff session's tab stands for the session, which lives on: closing only disconnects it.
+        if (tab is Tab.Terminal && tab.skiffSession != null) {
+            sessionManager.closeTerminal(workspace.serverId, tab)
+            return
+        }
+        removeTab(workspace, tab)
+    }
+
+    private fun removeTab(workspace: Workspace, tab: Tab) {
+        val tabId = tab.id
         navigationIntent++
         if (tab is Tab.Terminal) sessionManager.closeTerminal(workspace.serverId, tab)
         navigator.workspace(workspace.id)?.dropTab(tabId)
@@ -829,5 +939,6 @@ class AppViewModel(
         const val LOCAL_TERMINAL_ID = "local_terminal"
         const val STOP_TIMEOUT_MS = 5_000L
         const val HERDR_RESTART_TIMEOUT_MS = 10_000L
+        const val SHOWN_TERMINAL_WAIT_MILLIS = 10_000L
     }
 }

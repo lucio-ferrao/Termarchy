@@ -832,7 +832,7 @@ private fun HerdrAgentRowContent(pane: HerdrPane, title: String, onFocus: () -> 
 }
 
 /** herdr's symbol for a state; working has the blinking ghost instead. */
-private val HerdrAgentStatus.symbol: String
+internal val HerdrAgentStatus.symbol: String
     get() = when (this) {
         HerdrAgentStatus.Idle -> "○"
         HerdrAgentStatus.Done -> "✓"
@@ -841,7 +841,7 @@ private val HerdrAgentStatus.symbol: String
     }
 
 @Composable
-private fun agentStatusColor(status: HerdrAgentStatus): Color = with(herdrStatusColors()) {
+internal fun agentStatusColor(status: HerdrAgentStatus): Color = with(herdrStatusColors()) {
     when (status) {
         HerdrAgentStatus.Working -> working
         HerdrAgentStatus.Blocked -> blocked

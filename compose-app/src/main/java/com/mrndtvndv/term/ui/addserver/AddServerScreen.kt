@@ -42,6 +42,7 @@ fun AddServerScreen(
     var useGhosttyTerm by remember(initialConfig) { mutableStateOf(initialConfig?.useGhosttyTerm ?: false) }
     var herdrEnabled by remember(initialConfig) { mutableStateOf(initialConfig?.herdrEnabled ?: false) }
     var herdrSocketPath by remember(initialConfig) { mutableStateOf(initialConfig?.herdrSocketPath.orEmpty()) }
+    var skiffEnabled by remember(initialConfig) { mutableStateOf(initialConfig?.skiffEnabled ?: false) }
     val socketPathValid = herdrSocketPath.isBlank() || herdrSocketPath.trim().startsWith("/")
     val imagePasteState = rememberImagePasteSettingsState(initialConfig)
 
@@ -119,6 +120,14 @@ fun AddServerScreen(
                 focusBridge = focusBridge,
             )
 
+            SwitchOption(
+                title = "skiff sessions",
+                checked = skiffEnabled,
+                onCheckedChange = { skiffEnabled = it },
+                summary = "Lists the server's skiff sessions with the state of their agents, each opening in its " +
+                    "own tab. Needs skiff and its watch socket enabled there.",
+            )
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             ImagePasteSettingsSection(
@@ -143,6 +152,7 @@ fun AddServerScreen(
                             // Install and Remove persist this flag themselves, so saving the form keeps the stored
                             // value.
                             herdrFocusBridgeEnabled = initialConfig?.herdrFocusBridgeEnabled ?: false,
+                            skiffEnabled = skiffEnabled,
                             imagePasteEnabled = imagePasteState.isPasteActive,
                             imagePasteDirectory = imagePasteState.trimmedDirectory,
                             imagePasteAutoCleanup = imagePasteState.autoCleanup,

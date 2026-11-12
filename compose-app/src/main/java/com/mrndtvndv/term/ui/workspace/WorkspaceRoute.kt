@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,11 +52,18 @@ import com.mrndtvndv.term.ui.sftp.openDownloadedFile
 import com.mrndtvndv.term.ui.sftp.transfer.SftpTransferManager
 import com.mrndtvndv.term.workspace.SftpBrowserKey
 import com.mrndtvndv.term.workspace.SftpBrowserStore
+import com.mrndtvndv.term.herdr.HerdrAgentStatus
+import com.mrndtvndv.term.skiff.SkiffPhase
+import com.mrndtvndv.term.skiff.SkiffSession
+import com.mrndtvndv.term.skiff.SkiffSessionState
+import com.mrndtvndv.term.skiff.SkiffState
+import com.mrndtvndv.term.skiff.shownName
 import com.mrndtvndv.term.workspace.Tab
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.compose.TerminalThumbnail
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 
 class TerminalHostCallbacks(
     val onCommitContent: (TerminalSession, ClipData) -> Boolean,
@@ -94,6 +102,10 @@ fun WorkspaceRoute(
     val terminals by server.terminals.collectAsStateWithLifecycle()
     var dialog by remember { mutableStateOf<WorkspaceDialogs?>(null) }
     var gridVisible by rememberSaveable(workspaceId) { mutableStateOf(false) }
+    // On a skiff server every session has a tab here, connected as soon as it is listed; the cards carry their
+    // agents' state.
+    val skiffState by (server.skiff?.state ?: flowOf(SkiffState())).collectAsStateWithLifecycle(SkiffState())
+    val skiffSessions = skiffState.sessions.associateBy { it.name }
     val thumbnails = remember { TabThumbnails() }
     if (gridVisible) {
         DisposableEffect(terminals) {
@@ -115,6 +127,7 @@ fun WorkspaceRoute(
     val dialogActions = WorkspaceDialogController(
         appViewModel = appViewModel,
         serverId = serverId,
+        workspaceId = workspaceId,
         setDialog = { dialog = it },
         setGridVisible = { gridVisible = it },
     )
@@ -143,6 +156,19 @@ fun WorkspaceRoute(
         )
     }
     val selectedTab = workspace.tabs.firstOrNull { it.id == workspace.activeTabId }
+    if (server.skiff != null && skiffState.phase == SkiffPhase.Live) {
+        // keyed on the server too: a new connection has no terminals yet
+        LaunchedEffect(workspaceId, server, skiffSessions.keys) {
+            // the session on screen ended: back to the list, which no longer has it
+            val shownEnded = (selectedTab as? Tab.Terminal)?.skiffSession?.let { it !in skiffSessions } == true
+            appViewModel.syncSkiffTabs(workspaceId, skiffSessions.keys.toList())
+            if (shownEnded) {
+                focusManager.clearFocus(force = true)
+                keyboardController?.hide()
+                gridVisible = true
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         WorkspacePager(
@@ -213,16 +239,46 @@ fun WorkspaceRoute(
             }
         }
         val singleServer = LocalSingleRemoteServer.current
+        // a skiff server's sessions come grouped by space, those without one first, each group in tab order
+        val cards = workspace.tabs.map { tab ->
+            tabCard(tab, terminals, tab.id == workspace.activeTabId, singleServer, skiffSessions)
+        }.let { cards ->
+            if (server.skiff == null) cards else cards.sortedWith(compareBy({ it.group != null }, { it.group }))
+        }
+        // a session dropped among another space's cards moves to that space
+        val cardActions = if (server.skiff == null) gridActions else object : TabsGridActions by gridActions {
+            override fun onMoveTab(id: String, toIndex: Int) {
+                val moved = cards.firstOrNull { it.id == id } ?: return
+                val others = cards.filter { it.id != id }
+                val before = others.getOrNull(toIndex - 1)
+                val after = others.getOrNull(toIndex)
+                val tabIds = workspace.tabs.map { it.id }.filter { it != id }
+                appViewModel.moveTab(
+                    id,
+                    before?.let { tabIds.indexOf(it.id) + 1 } ?: after?.let { tabIds.indexOf(it.id) } ?: tabIds.size,
+                )
+                val space = (before ?: after)?.group
+                val name = (workspace.tabs.firstOrNull { it.id == id } as? Tab.Terminal)?.skiffSession ?: return
+                if (space != moved.group) appViewModel.moveSkiffSession(serverId, name, space)
+            }
+        }
         TabsGrid(
             visible = gridVisible,
             workspaces = workspaceState.workspacesFor(serverId).map { item ->
                 WorkspaceItem(item.id, item.name, item.root, item.tabs.size, item.id == workspace.id)
             },
-            tabs = workspace.tabs.map { tab ->
-                tabCard(tab, terminals, tab.id == workspace.activeTabId, singleServer)
-            },
-            addOptions = TabAddOptions(canAddSftp = canAddSftp, canAddGit = canAddGit),
-            actions = gridActions,
+            tabs = cards,
+            addOptions = TabAddOptions(
+                canAddSftp = canAddSftp,
+                canAddGit = canAddGit,
+                sessionsOnly = server.skiff != null,
+            ),
+            // the sessions shown are the last ones known while skiff does not answer
+            remote = RemoteGridState(
+                banner = skiffState.error?.takeIf { server.skiff != null && skiffState.phase == SkiffPhase.Unavailable }
+                    ?.let { RemoteBanner("skiff is not reachable: $it") },
+            ),
+            actions = cardActions,
             preview = { card, modifier ->
                 TabPreview(workspace.tabs.firstOrNull { it.id == card.id }, thumbnails, modifier)
             },
@@ -266,18 +322,30 @@ private fun needsOverlayTabsButton(
     is Tab.Sftp, is Tab.Viewer -> false
 }
 
-private fun tabCard(tab: Tab, terminals: Map<String, TerminalEntry>, current: Boolean, singleServer: Boolean): TabCard {
+private fun tabCard(
+    tab: Tab,
+    terminals: Map<String, TerminalEntry>,
+    current: Boolean,
+    singleServer: Boolean,
+    skiffSessions: Map<String, SkiffSession>,
+): TabCard {
     val entry = terminals[tab.id]
     return when (tab) {
-        is Tab.Terminal -> TabCard(
-            id = tab.id,
-            kind = TabKind.Terminal,
-            title = tabLabel(tab, terminals, singleServer),
-            subtitle = entry?.session?.reportedCwd ?: tab.cwd,
-            running = entry?.running ?: true,
-            exitStatus = entry?.takeIf { !it.running }?.session?.exitStatus ?: 0,
-            current = current,
-        )
+        is Tab.Terminal -> {
+            val session = tab.skiffSession?.let(skiffSessions::get)
+            TabCard(
+                id = tab.id,
+                kind = TabKind.Terminal,
+                title = session?.shownName ?: tabLabel(tab, terminals, singleServer),
+                // a session is its name alone; its space heads its group
+                subtitle = if (tab.skiffSession != null) null else entry?.session?.reportedCwd ?: tab.cwd,
+                running = entry?.running ?: true,
+                exitStatus = entry?.takeIf { !it.running }?.session?.exitStatus ?: 0,
+                current = current,
+                status = session?.state?.asHerdr,
+                group = session?.space,
+            )
+        }
         is Tab.Sftp -> TabCard(tab.id, TabKind.Sftp, tabLabel(tab, terminals, singleServer), tab.dir, true, 0, current)
         is Tab.Git -> TabCard(tab.id, TabKind.Git, tabLabel(tab, terminals, singleServer), tab.repoDir, true, 0, current)
         is Tab.Viewer -> TabCard(tab.id, TabKind.Viewer, tabLabel(tab, terminals, singleServer), tab.path, true, 0, current)
@@ -397,3 +465,12 @@ internal fun TerminalHostCallbacks.paneCallbacks(
     onOpenUrl = onOpenUrl,
     onUpdateSettings = onUpdateSettings,
 )
+
+/** skiff's states drawn as herdr draws its agents: asking as blocked, ready as done. */
+private val SkiffSessionState.asHerdr: HerdrAgentStatus
+    get() = when (this) {
+        SkiffSessionState.Idle -> HerdrAgentStatus.Idle
+        SkiffSessionState.Working -> HerdrAgentStatus.Working
+        SkiffSessionState.Asking -> HerdrAgentStatus.Blocked
+        SkiffSessionState.Ready -> HerdrAgentStatus.Done
+    }

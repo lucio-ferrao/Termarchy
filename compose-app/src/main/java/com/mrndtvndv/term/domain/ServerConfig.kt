@@ -28,6 +28,8 @@ data class ServerConfig(
     val herdrSocketPath: String? = null,
     /** Pane focus uses the herdr focus bridge helper on this server. Off uses the direct herdr socket only. */
     val herdrFocusBridgeEnabled: Boolean = false,
+    /** Lists the server's skiff sessions with their agents' state, and opens each in its own tab. */
+    val skiffEnabled: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_IMAGE_PASTE_MAX_FILES = 20

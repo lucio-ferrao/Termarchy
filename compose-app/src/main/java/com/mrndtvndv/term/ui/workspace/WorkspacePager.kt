@@ -23,7 +23,6 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.unit.Velocity
 import com.mrndtvndv.term.CrashBreadcrumbs
-import com.mrndtvndv.term.navigation.LocalAnimationsEnabled
 import com.mrndtvndv.term.workspace.Tab
 import kotlin.math.abs
 
@@ -51,7 +50,7 @@ fun WorkspacePager(
 
     val pageNestedScrollConnection = rememberHorizontalDominantConnection(pagerState)
 
-    PagerSyncEffects(pagerState, tabs, currentTabId, onSelectTab, LocalAnimationsEnabled.current)
+    PagerSyncEffects(pagerState, tabs, currentTabId, onSelectTab)
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -107,7 +106,6 @@ private fun PagerSyncEffects(
     tabs: List<Tab>,
     currentTabId: String?,
     onSelectTab: (Tab) -> Unit,
-    animate: Boolean,
 ) {
     val targetIndex = tabs.indexOfFirst { it.id == currentTabId }
     val latestTabs by rememberUpdatedState(tabs)
@@ -117,9 +115,11 @@ private fun PagerSyncEffects(
     // Keyed on the index, not the tab list: the list changes on every model update (an SFTP
     // tab saving its dir), which must not restart these effects. Skipping when already
     // at/heading to the page avoids re-animating, which replaces pager nodes mid-layout.
+    // Swipes move the pager themselves; this only follows the app's own changes, and goes straight there: a page
+    // becomes active, and opens its shell, only once the pager settles, and a list usually covers the pager anyway.
     LaunchedEffect(targetIndex) {
         if (targetIndex < 0 || pagerState.targetPage == targetIndex) return@LaunchedEffect
-        if (animate) pagerState.animateScrollToPage(targetIndex) else pagerState.scrollToPage(targetIndex)
+        pagerState.scrollToPage(targetIndex)
     }
 
     // Tabs can be closed while the pager sits on the removed page. Snap to a valid page

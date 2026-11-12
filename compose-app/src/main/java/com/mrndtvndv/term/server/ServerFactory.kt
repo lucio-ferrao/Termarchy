@@ -11,6 +11,7 @@ import com.mrndtvndv.term.herdr.FocusBridgeClient
 import com.mrndtvndv.term.herdr.FocusBridgeInstaller
 import com.mrndtvndv.term.herdr.FocusBridgePaths
 import com.mrndtvndv.term.herdr.HerdrControlClient
+import com.mrndtvndv.term.skiff.SkiffClient
 import com.mrndtvndv.term.herdr.HerdrShortcutPublisher
 import com.mrndtvndv.term.workspace.Tab
 import com.mrndtvndv.term.workspace.herdrAttachCommand
@@ -18,6 +19,7 @@ import com.mrndtvndv.term.workspace.herdrControlSocketPath
 import com.mrndtvndv.term.workspace.herdrFullUiCommand
 import com.mrndtvndv.term.workspace.isHerdrFullUiTab
 import com.mrndtvndv.term.workspace.plainShellCommand
+import com.mrndtvndv.term.workspace.skiffOpenCommand
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase
 import com.termux.terminal.TerminalSession
 import kotlinx.coroutines.CoroutineScope
@@ -103,6 +105,7 @@ class ServerFactory(
         } else {
             null
         }
+        val skiff = if (config.skiffEnabled) SkiffClient(session) else null
         val server = Server(
             config = config,
             sshSession = session,
@@ -110,9 +113,11 @@ class ServerFactory(
             homeDir = homeDir,
             herdr = herdr,
             focusBridge = focusBridge,
+            skiff = skiff,
         )
         server.onDisconnect { herdrScope.cancel() }
         if (herdr != null) herdrScope.launch { runCatching { herdr.start() } }
+        if (skiff != null) herdrScope.launch { skiff.start() }
         // A launcher shortcut per Herdr pane, kept while connected; they stay after disconnecting, but not the state of
         // their agents, no longer known.
         if (herdr != null) {
@@ -151,6 +156,7 @@ class ServerFactory(
             // A projected herdr card attaches directly. A missing binary or a rejected attach ends the shell,
             // which the tab reports as an ended attachment; no exec probe runs per open.
             remote != null -> herdrAttachCommand(remote.terminalId, socket)
+            tab.skiffSession != null -> skiffOpenCommand(tab.skiffSession)
             // A plain tab is a login shell in its directory. Nothing is kept alive on the server for it.
             else -> plainShellCommand(tab)
         }
@@ -175,6 +181,7 @@ class ServerFactory(
             built
         }.onFailure { channel.close() }.getOrThrow()
 
+        if (tab.skiffSession != null) server.markSkiffTab(tab.id)
         server.putTerminal(tab.id, termSession, channel)
         return termSession
     }

@@ -1,6 +1,7 @@
 package com.mrndtvndv.term.ui.workspace
 
 import com.mrndtvndv.term.AppViewModel
+import com.mrndtvndv.term.skiff.shownName
 import com.mrndtvndv.term.TabType
 import com.mrndtvndv.term.navigation.AppRoute
 import com.mrndtvndv.term.server.Server
@@ -11,6 +12,7 @@ import com.mrndtvndv.term.workspace.Workspace
 internal class WorkspaceDialogController(
     private val appViewModel: AppViewModel,
     private val serverId: String,
+    private val workspaceId: String,
     private val setDialog: (WorkspaceDialogs?) -> Unit,
     private val setGridVisible: (Boolean) -> Unit,
 ) : WorkspaceDialogActions {
@@ -38,6 +40,22 @@ internal class WorkspaceDialogController(
         setGridVisible(false)
         appViewModel.deleteWorkspace(workspaceId)
     }
+
+    override fun newSkiffSession(title: String) {
+        setDialog(null)
+        setGridVisible(false)
+        appViewModel.newSkiffSession(workspaceId, title)
+    }
+
+    override fun updateSkiffSession(name: String, title: String, space: String?) {
+        setDialog(null)
+        appViewModel.updateSkiffSession(serverId, name, title, space)
+    }
+
+    override fun endSkiffSession(name: String) {
+        setDialog(null)
+        appViewModel.endSkiffSession(serverId, name)
+    }
 }
 
 /** Actions for the tabs grid on the workspace screen. The route only lays out; behaviour lives here. */
@@ -63,10 +81,22 @@ internal class WorkspaceGridController(
 
     override fun onRenameTab(id: String) {
         val tab = workspace.tabs.firstOrNull { it.id == id } as? Tab.Terminal ?: return
+        // A skiff session is named on the server, where it is moved between spaces or ended instead.
+        val name = tab.skiffSession
+        if (name != null) {
+            val session = server.skiff?.state?.value?.sessions?.firstOrNull { it.name == name }
+            setDialog(WorkspaceDialogs.SkiffSession(name, session?.shownName ?: name, session?.space))
+            return
+        }
         setDialog(WorkspaceDialogs.RenameTerminal(tab.id, tab.name))
     }
 
     override fun onNewTab(type: TabType) {
+        // On a skiff server a new terminal is a new session, named first.
+        if (type == TabType.Terminal && server.skiff != null) {
+            setDialog(WorkspaceDialogs.NewSkiffSession)
+            return
+        }
         appViewModel.addTab(workspace.id, type)
         setGridVisible(false)
     }
