@@ -89,6 +89,11 @@ pub const SshNativeSession = struct {
     // patterns from Zig ArrayLists combined with libssh2's own malloc usage.
     const queue_allocator = std.heap.page_allocator;
     const socket_poll_timeout_ms: c_int = 1000;
+    // While a channel is opening or an op waits for a reply, poll at most this long. The reply
+    // can be read off the socket by another channel's libssh2 call and parked in libssh2's packet
+    // queue, leaving nothing on the socket to wake poll; a full sleep then delays each step of a
+    // terminal open (open, pty, env, exec) by up to the keepalive interval.
+    const awaiting_reply_poll_ms: c_int = 10;
     const keepalive_interval_seconds: c_uint = 10;
     // Deliver shell output to the JVM in ~64 KiB batches instead of one JNI
     // callback + Handler message per libssh2 read chunk (16 KiB).
@@ -971,6 +976,9 @@ pub const SshNativeSession = struct {
     slot_started_ns: u64 = 0,
     // Set when a pass had budgeted work left over. The next poll must not sleep.
     more_work: bool = false,
+    // Set by processOps when an op is past its open but still waits on the server (pty, env,
+    // startup, or an exec's output). The next poll must stay short, like for a held open slot.
+    ops_awaiting_reply: bool = false,
     // Why the session is ending, reported by pending operations that fail on the way out.
     session_end_reason: []const u8 = "The SSH session ended",
     const CommandKind = enum {
@@ -2189,11 +2197,13 @@ pub const SshNativeSession = struct {
         self.streams_lock.lock();
         defer self.streams_lock.unlock();
         var index: usize = 0;
+        self.ops_awaiting_reply = false;
         while (index < self.ops.items.len) {
             const op = self.ops.items[index];
             switch (op.stage) {
                 .pty, .env, .startup, .reading => {
                     if (!op.finished) self.stepOp(op);
+                    if (!op.finished) self.ops_awaiting_reply = true;
                 },
                 .queued, .opening => {},
             }
@@ -2292,6 +2302,7 @@ pub const SshNativeSession = struct {
             // A held slot must be re-checked against its deadline, and leftover budgeted work must
             // continue, so neither may sleep for the keepalive interval.
             if (self.open_slot != null) poll_timeout_ms = @min(poll_timeout_ms, socket_poll_timeout_ms);
+            if (self.open_slot != null or self.ops_awaiting_reply) poll_timeout_ms = @min(poll_timeout_ms, awaiting_reply_poll_ms);
             if (self.more_work) poll_timeout_ms = 0;
 
             const poll_result = c.poll(&fds, 2, poll_timeout_ms);
