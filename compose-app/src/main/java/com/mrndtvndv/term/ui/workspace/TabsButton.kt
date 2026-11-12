@@ -1,11 +1,8 @@
 package com.mrndtvndv.term.ui.workspace
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.delay
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -52,7 +49,7 @@ fun TabsButton(cards: List<TabCard>, onOpenTabs: () -> Unit) {
 
 /**
  * The tabs grid in small: Termarchy's ghost per card, two to a row as in the grid and each group from a new row, in
- * its agent's color ([neutral] when idle or without one), blinking while it works, filled for the current tab and
+ * its agent's color ([neutral] when idle or without one), its eyes blinking while it works, filled for the current tab and
  * outlined for the others. Ghosts are as big as the space allows, shrinking until all fit.
  */
 @Composable
@@ -60,10 +57,14 @@ private fun TabsMiniature(cards: List<TabCard>, neutral: Color, modifier: Modifi
     val colors = cards.map { card ->
         card.status?.takeIf { it != HerdrAgentStatus.Idle }?.let { agentStatusColor(it) } ?: neutral
     }
-    val blink = if (cards.any { it.status == HerdrAgentStatus.Working }) {
-        rememberInfiniteTransition(label = "working tabs")
-            .animateFloat(0f, 1f, infiniteRepeatable(tween(BLINK_MS * 2, easing = LinearEasing)), label = "blink")
-    } else null
+    // the wall clock, ticking only while an agent works
+    val working = cards.any { it.status == HerdrAgentStatus.Working }
+    val clock = produceState(System.currentTimeMillis(), working) {
+        while (working) {
+            value = System.currentTimeMillis()
+            delay(CLOCK_TICK_MS)
+        }
+    }
     Canvas(modifier) {
         if (cards.isEmpty()) return@Canvas
         // rows of two cards, a new row at each group
@@ -83,14 +84,29 @@ private fun TabsMiniature(cards: List<TabCard>, neutral: Color, modifier: Modifi
         val width = ghostWidth * 2 + gap
         val left = (size.width - width) / 2
         var top = (size.height - rows.size * ghostHeight - gap * (rows.size - 1)) / 2
-        val blinkOff = (blink?.value ?: 0f) >= 0.5f
+        val now = clock.value
         rows.forEach { indices ->
             indices.forEachIndexed { column, index ->
-                if (blinkOff && cards[index].status == HerdrAgentStatus.Working) return@forEachIndexed
                 val origin = Offset(left + column * (ghostWidth + gap), top)
-                drawGhost(colors[index], origin, ghostHeight, filled = cards[index].current, minStroke = 1.dp.toPx())
+                drawGhost(
+                    colors[index],
+                    origin,
+                    ghostHeight,
+                    filled = cards[index].current,
+                    minStroke = 1.dp.toPx(),
+                    eyes = cards[index].status != HerdrAgentStatus.Working || eyesShown(now, cards[index].since),
+                )
             }
             top += ghostHeight + gap
         }
     }
 }
+
+/**
+ * Whether a working agent's eyes show at [now]: they blink as in Keyarchy, counting from when it started working
+ * ([since], wall-clock millis), so agents started apart do not blink together.
+ */
+private fun eyesShown(now: Long, since: Long?): Boolean = Math.floorMod(now - (since ?: 0L), 2L * BLINK_MS) < BLINK_MS
+
+/** How often the clock of the blinking ticks. */
+private const val CLOCK_TICK_MS = 50L

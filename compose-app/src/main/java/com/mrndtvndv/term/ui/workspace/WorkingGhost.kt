@@ -39,16 +39,24 @@ fun WorkingGhost(color: Color, modifier: Modifier = Modifier) {
             translate(-BOX_LEFT, -BOX_TOP)
         }) {
             drawPath(body, color, style = stroke)
-            if (blink.value < 0.5f) drawPath(eyes, color, style = stroke)
+            if (blink.value < 0.5f) drawPath(eyesPath, color, style = stroke)
         }
     }
 }
 
 /**
  * The ghost [height] tall at [topLeft], filled with its eyes cut out, or as the outline of the icon; its line is
- * never thinner than [minStroke] pixels, so small ghosts still read.
+ * never thinner than [minStroke] pixels, so small ghosts still read. Without [eyes], the stroke of the eyes is not
+ * drawn (filled, it is not cut out), as the eyes blink.
  */
-internal fun DrawScope.drawGhost(color: Color, topLeft: Offset, height: Float, filled: Boolean, minStroke: Float) {
+internal fun DrawScope.drawGhost(
+    color: Color,
+    topLeft: Offset,
+    height: Float,
+    filled: Boolean,
+    minStroke: Float,
+    eyes: Boolean = true,
+) {
     val scale = height / BOX_HEIGHT
     val stroke = Stroke(width = maxOf(STROKE, minStroke / scale), cap = StrokeCap.Round, join = StrokeJoin.Round)
     withTransform({
@@ -57,11 +65,11 @@ internal fun DrawScope.drawGhost(color: Color, topLeft: Offset, height: Float, f
         translate(-BOX_LEFT, -BOX_TOP)
     }) {
         if (filled) {
-            drawPath(filledBody, color)
+            drawPath(if (eyes) filledBody else body, color)
             drawPath(body, color, style = stroke)
         } else {
             drawPath(body, color, style = stroke)
-            drawPath(eyes, color, style = stroke)
+            if (eyes) drawPath(eyesPath, color, style = stroke)
         }
     }
 }
@@ -81,7 +89,7 @@ internal const val GHOST_ASPECT = BOX_WIDTH / BOX_HEIGHT
 private val body = PathParser().parsePathString(
     "M36,54 C36,34 72,34 72,54 L72,78 L66.71,67.94 L61.41,78 L59.29,78 L54,63.18 L48.71,78 L46.59,78 L41.29,67.94 L36,78 Z",
 ).toPath()
-private val eyes = PathParser().parsePathString("M45,52 H63").toPath()
+private val eyesPath = PathParser().parsePathString("M45,52 H63").toPath()
 private val filledBody = Path.combine(
     PathOperation.Difference,
     body,

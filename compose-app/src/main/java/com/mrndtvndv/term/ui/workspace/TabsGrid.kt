@@ -113,6 +113,7 @@ data class TabCard(
     val remote: Boolean = false, // a projected herdr card: no drag, no local rename
     val status: HerdrAgentStatus? = null, // a skiff session's agent, shown in place of the icon
     val group: String? = null,           // the heading it is listed under; cards come grouped from the caller
+    val since: Long? = null,             // when a skiff session's state last changed, wall-clock millis
 )
 
 data class WorkspaceItem(val id: String, val name: String, val root: String, val tabCount: Int, val active: Boolean)

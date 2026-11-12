@@ -36,6 +36,7 @@ import com.mrndtvndv.term.skiff.SkiffClient
 import com.mrndtvndv.term.skiff.SkiffPhase
 import com.mrndtvndv.term.skiff.SkiffSessionState
 import com.mrndtvndv.term.skiff.shownName
+import com.mrndtvndv.term.skiff.skiffShortcutId
 import kotlinx.coroutines.flow.StateFlow
 import java.io.IOException
 import java.lang.ref.WeakReference
@@ -425,6 +426,10 @@ class AppSessionManager private constructor(context: Context) : AppSessionManage
             BitmapFactory.decodeResource(appContext.resources, R.mipmap.ic_launcher)
         )
         builder.setAutoCancel(true)
+        // a session's notice is told apart by its shortcut, so Keyarchy shows it in the session's entry
+        if (destination is NotificationDestination.SkiffSession && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.setShortcutId(skiffShortcutId(destination.serverId, destination.name))
+        }
 
         notificationManager.notify(
             notificationId,

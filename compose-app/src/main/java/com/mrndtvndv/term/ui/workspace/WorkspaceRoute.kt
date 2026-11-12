@@ -359,6 +359,7 @@ private fun tabCard(
                 current = current,
                 status = session?.state?.asHerdr,
                 group = session?.space,
+                since = session?.since,
             )
         }
         is Tab.Sftp -> TabCard(tab.id, TabKind.Sftp, tabLabel(tab, terminals, singleServer), tab.dir, true, 0, current)
