@@ -159,6 +159,9 @@ interface TabsGridActions {
     fun onWorkspaceMenu(action: WorkspaceMenuAction)
     fun onOpenSettings()
     fun onDismiss()
+
+    /** A group's heading was tapped: fold it, or open it. */
+    fun onToggleGroup(group: String) {}
 }
 
 @Composable
@@ -169,6 +172,7 @@ fun TabsGrid(
     addOptions: TabAddOptions,
     actions: TabsGridActions,
     remote: RemoteGridState = RemoteGridState(),
+    collapsedGroups: Set<String> = emptySet(),
     preview: @Composable (tab: TabCard, modifier: Modifier) -> Unit = { _, _ -> },
 ) {
     BackHandler(enabled = visible) { actions.onDismiss() }
@@ -192,6 +196,7 @@ fun TabsGrid(
                     reorder = reorder,
                     tabs = tabs,
                     banner = remote.banner,
+                    collapsedGroups = collapsedGroups,
                     actions = actions,
                     preview = preview,
                 )
@@ -218,6 +223,7 @@ private fun TabCardGrid(
     reorder: TabReorderState,
     tabs: List<TabCard>,
     banner: RemoteBanner?,
+    collapsedGroups: Set<String>,
     actions: TabsGridActions,
     preview: @Composable (tab: TabCard, modifier: Modifier) -> Unit,
 ) {
@@ -250,16 +256,21 @@ private fun TabCardGrid(
             val tabGroup = groups[index]
             if (tabGroup != null && tabGroup != group) {
                 val heading = tabGroup
+                val folded = heading in collapsedGroups
                 item(key = "group:$heading", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        heading,
-                        modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+                        (if (folded) "▸ " else "▾ ") + heading,
+                        modifier = Modifier
+                            .clickable { actions.onToggleGroup(heading) }
+                            .padding(start = 4.dp, top = 8.dp, end = 4.dp),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
             group = tabGroup
+            // a folded space shows its heading alone
+            if (tabGroup in collapsedGroups) return@forEachIndexed
             item(key = tab.id) {
                 TabGridCard(
                     tab = tab,

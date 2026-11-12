@@ -31,6 +31,11 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.filter
+import com.mrndtvndv.term.skiff.SkiffClient
+import com.mrndtvndv.term.skiff.SkiffPhase
+import com.mrndtvndv.term.skiff.SkiffSessionState
+import com.mrndtvndv.term.skiff.shownName
 import kotlinx.coroutines.flow.StateFlow
 import java.io.IOException
 import java.lang.ref.WeakReference
@@ -70,6 +75,10 @@ class AppSessionManager private constructor(context: Context) : AppSessionManage
                 server.herdr?.onEndpointNotification = { message ->
                     handleHerdrEndpointNotification(server, message)
                 }
+                server.skiff?.let { skiff ->
+                    val notices = appScope.launch { notifySkiffStates(server, skiff) }
+                    server.onDisconnect { notices.cancel() }
+                }
                 server.onDisconnect {
                     connectionStores.clear(config.id)
                     // Only this connection's actions end. A replacement connection keeps its own.
@@ -107,6 +116,29 @@ class AppSessionManager private constructor(context: Context) : AppSessionManage
                 NotificationDestination.HerdrSession(server.config.id, socket)
             }
             deliverTerminalNotification(message.title, message.body, destination)
+        }
+    }
+
+    /**
+     * Tells when a skiff session finishes (ready) or asks, as the system notification of a terminal: with the app in
+     * the background only, and never on connecting, for states that were already so.
+     */
+    private suspend fun notifySkiffStates(server: Server, skiff: SkiffClient) {
+        var known: Map<String, SkiffSessionState>? = null
+        skiff.state.filter { it.phase == SkiffPhase.Live }.collect { state ->
+            val before = known
+            known = state.sessions.associate { it.name to it.state }
+            if (before == null) return@collect
+            state.sessions.forEach { session ->
+                val body = when (session.state) {
+                    SkiffSessionState.Ready -> "Done"
+                    SkiffSessionState.Asking -> "Needs your input"
+                    else -> return@forEach
+                }
+                if (before[session.name] == session.state) return@forEach
+                val destination = NotificationDestination.SkiffSession(server.config.id, session.name)
+                deliverTerminalNotification(session.shownName, body, destination, inApp = false)
+            }
         }
     }
 
@@ -304,8 +336,10 @@ class AppSessionManager private constructor(context: Context) : AppSessionManage
      * notifications are delivered separately through Herdr's semantic endpoint message.
      */
     fun handleTerminalNotification(title: String?, body: String?, location: SessionLocation?) {
-        // A skiff session's state is on its card; in front, its agent's own notices would only cover the terminal.
+        // A skiff session's notices come from its state (notifySkiffStates), not from its agent: Claude's "waiting for
+        // your input" only repeats a ready a minute later.
         val skiffTab = location?.let { (serverId, tabId) -> coordinator.getServer(serverId)?.isSkiffTab(tabId) } == true
+        if (skiffTab) return
         val destination = location?.let { (serverId, tabId) ->
             val server = coordinator.getServer(serverId)
             val socket = server?.let { herdrControlSocketPath(it.config.herdrSocketPath, it.homeDir) }.orEmpty()
@@ -314,7 +348,7 @@ class AppSessionManager private constructor(context: Context) : AppSessionManage
             ) return
             notificationDestination(serverId, tabId, socket)
         }
-        deliverTerminalNotification(title, body, destination, inApp = !skiffTab)
+        deliverTerminalNotification(title, body, destination)
     }
 
     private fun deliverTerminalNotification(

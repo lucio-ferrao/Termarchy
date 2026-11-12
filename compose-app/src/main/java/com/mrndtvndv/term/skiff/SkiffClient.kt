@@ -41,8 +41,12 @@ class SkiffClient(private val session: SshSession) {
                 val reader = HerdrLineReader(opened, MAX_LINE_BYTES)
                 while (true) {
                     val line = reader.readLine() ?: break
-                    val sessions = SkiffWire.decode(line)
-                    _state.value = SkiffState(phase = SkiffPhase.Live, sessions = sessions)
+                    val snapshot = SkiffWire.decode(line)
+                    _state.value = SkiffState(
+                        phase = SkiffPhase.Live,
+                        sessions = snapshot.sessions,
+                        collapsed = snapshot.collapsed.toSet(),
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -71,6 +75,9 @@ class SkiffClient(private val session: SshSession) {
 
     /** [space] null leaves the session without one. */
     suspend fun move(name: String, space: String?) = run("move", name, space ?: "-")
+
+    /** Folds [space], hiding its sessions, or opens it; `skiff ui` follows. */
+    suspend fun setCollapsed(space: String, collapsed: Boolean) = run(if (collapsed) "collapse" else "expand", space)
 
     /** Names the session, and the Claude conversation in it; [title] null goes back to its zmx name. */
     suspend fun rename(name: String, title: String?) = run("rename", name, title ?: "-")

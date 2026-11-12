@@ -67,7 +67,7 @@ internal fun DrawScope.drawGhost(color: Color, topLeft: Offset, height: Float, f
 }
 
 /** How long the eyes stay shown, and then hidden. */
-private const val BLINK_MS = 420
+internal const val BLINK_MS = 420
 
 /** The paths of ic_launcher_monochrome (108 viewport) and the box they fill with their stroke. */
 private const val STROKE = 3.7f

@@ -663,6 +663,11 @@ class AppViewModel(
         viewModelScope.launch { skiff.move(name, space) }
     }
 
+    fun setSkiffSpaceCollapsed(serverId: String, space: String, collapsed: Boolean) {
+        val skiff = getServer(serverId)?.skiff ?: return
+        viewModelScope.launch { skiff.setCollapsed(space, collapsed) }
+    }
+
     /** Ends the session on the server; its tab goes with it when the list no longer has it. */
     fun endSkiffSession(serverId: String, name: String) {
         val skiff = getServer(serverId)?.skiff ?: return

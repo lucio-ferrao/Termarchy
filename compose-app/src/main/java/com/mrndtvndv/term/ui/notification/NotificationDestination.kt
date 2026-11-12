@@ -1,6 +1,7 @@
 package com.mrndtvndv.term.ui.notification
 
 import com.mrndtvndv.term.domain.ServerConfig
+import com.mrndtvndv.term.workspace.Tab
 import com.mrndtvndv.term.workspace.WorkspaceState
 import com.mrndtvndv.term.workspace.herdrFullUiTabId
 import com.mrndtvndv.term.workspace.isHerdrSessionWorkspace
@@ -27,6 +28,9 @@ sealed interface NotificationDestination {
         val socketPath: String,
         val terminalId: String,
     ) : NotificationDestination
+
+    /** A skiff session by its zmx name, which never changes: its tab is found when opened. */
+    data class SkiffSession(override val serverId: String, val name: String) : NotificationDestination
 }
 
 /** The destination of a notification from the terminal of [tabId]. [herdrSocketPath] is the server's control socket. */
@@ -44,11 +48,13 @@ object NotificationDestinationCodec {
     const val TAB_ID = "termux.terminal.notification.tab_id"
     const val HERDR_SOCKET = "termux.terminal.notification.herdr_socket"
     const val TERMINAL_ID = "termux.terminal.notification.terminal_id"
-    val KEYS = listOf(KIND, SERVER_ID, TAB_ID, HERDR_SOCKET, TERMINAL_ID)
+    const val SKIFF_SESSION = "termux.terminal.notification.skiff_session"
+    val KEYS = listOf(KIND, SERVER_ID, TAB_ID, HERDR_SOCKET, TERMINAL_ID, SKIFF_SESSION)
 
     private const val APP_TAB = "app_tab"
     private const val HERDR_SESSION = "herdr_session"
     private const val HERDR_PANE = "herdr_pane"
+    private const val SKIFF = "skiff_session"
 
     fun encode(destination: NotificationDestination): Map<String, String> = when (destination) {
         is NotificationDestination.AppTab -> mapOf(
@@ -67,6 +73,11 @@ object NotificationDestinationCodec {
             HERDR_SOCKET to destination.socketPath,
             TERMINAL_ID to destination.terminalId,
         )
+        is NotificationDestination.SkiffSession -> mapOf(
+            KIND to SKIFF,
+            SERVER_ID to destination.serverId,
+            SKIFF_SESSION to destination.name,
+        )
     }
 
     /** Null when the extras do not hold a complete destination. */
@@ -78,6 +89,7 @@ object NotificationDestinationCodec {
             HERDR_PANE -> extra(HERDR_SOCKET)?.let { socket ->
                 extra(TERMINAL_ID)?.let { NotificationDestination.HerdrPane(serverId, socket, it) }
             }
+            SKIFF -> extra(SKIFF_SESSION)?.let { NotificationDestination.SkiffSession(serverId, it) }
             else -> null
         }
     }
@@ -122,4 +134,8 @@ fun notificationRoute(
         ?.takeIf { it.serverId == destination.serverId && !config.herdrEnabled && !isHerdrSessionWorkspace(it) }
         ?.let { NotificationRoute.WorkspaceTab(it.id, destination.tabId) }
         ?: NotificationRoute.Server
+    is NotificationDestination.SkiffSession -> workspaces.workspacesFor(destination.serverId).firstNotNullOfOrNull { workspace ->
+        workspace.tabs.firstOrNull { (it as? Tab.Terminal)?.skiffSession == destination.name }
+            ?.let { NotificationRoute.WorkspaceTab(workspace.id, it.id) }
+    } ?: NotificationRoute.Server
 }

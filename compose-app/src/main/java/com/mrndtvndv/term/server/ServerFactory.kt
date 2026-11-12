@@ -12,6 +12,8 @@ import com.mrndtvndv.term.herdr.FocusBridgeInstaller
 import com.mrndtvndv.term.herdr.FocusBridgePaths
 import com.mrndtvndv.term.herdr.HerdrControlClient
 import com.mrndtvndv.term.skiff.SkiffClient
+import com.mrndtvndv.term.skiff.SkiffPhase
+import com.mrndtvndv.term.skiff.SkiffShortcutPublisher
 import com.mrndtvndv.term.herdr.HerdrShortcutPublisher
 import com.mrndtvndv.term.workspace.Tab
 import com.mrndtvndv.term.workspace.herdrAttachCommand
@@ -27,6 +29,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -125,6 +129,17 @@ class ServerFactory(
                 context, config.id, herdrControlSocketPath(config.herdrSocketPath, homeDir), singleServer,
             )
             herdrScope.launch { herdr.state.mapNotNull { it.snapshot }.distinctUntilChanged().collect(shortcuts::publish) }
+            server.onDisconnect { shortcuts.forget() }
+        }
+        // shortcuts to the panes of a Herdr no longer used would only take the places of the sessions'
+        if (herdr == null) HerdrShortcutPublisher.removeAll(context, config.id)
+        // the same for each skiff session outside a folded space
+        if (skiff != null) {
+            val shortcuts = SkiffShortcutPublisher(context, config.id)
+            herdrScope.launch {
+                skiff.state.filter { it.phase == SkiffPhase.Live }.map { it.sessions to it.collapsed }
+                    .distinctUntilChanged().collect { (sessions, collapsed) -> shortcuts.publish(sessions, collapsed) }
+            }
             server.onDisconnect { shortcuts.forget() }
         }
         if (focusBridge?.enabled == true) herdrScope.launch { focusBridge.warmUp() }

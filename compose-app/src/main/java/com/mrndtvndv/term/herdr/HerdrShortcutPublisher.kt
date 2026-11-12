@@ -95,5 +95,16 @@ class HerdrShortcutPublisher(
     companion object {
         private const val TAG = "HerdrShortcuts"
         const val ACTION_OPEN_HERDR_TERMINAL = "com.mrndtvndv.term.OPEN_HERDR_TERMINAL"
+
+        /** Removes the shortcuts of [serverId]'s panes, for a server connected without Herdr. */
+        fun removeAll(context: Context, serverId: String) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) return
+            val manager = context.getSystemService(ShortcutManager::class.java) ?: return
+            runCatching {
+                val prefix = herdrShortcutId(serverId, "")
+                val ours = manager.dynamicShortcuts.map { it.id }.filter { it.startsWith(prefix) }
+                if (ours.isNotEmpty()) manager.removeDynamicShortcuts(ours)
+            }.onFailure { Log.w(TAG, "Could not remove the Herdr shortcuts of $serverId", it) }
+        }
     }
 }

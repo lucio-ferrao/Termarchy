@@ -29,14 +29,17 @@ data class SkiffSession(
     val cwd: String? = null,
 )
 
+/** The list `skiff watch` writes: the sessions, and the spaces shown folded, their sessions hidden. */
 @Serializable
-internal data class SkiffSnapshot(val sessions: List<SkiffSession>)
+internal data class SkiffSnapshot(val sessions: List<SkiffSession>, val collapsed: List<String> = emptyList())
 
 enum class SkiffPhase { Connecting, Live, Unavailable, Closed }
 
 data class SkiffState(
     val phase: SkiffPhase = SkiffPhase.Connecting,
     val sessions: List<SkiffSession> = emptyList(),
+    /** Spaces folded, here or in `skiff ui`: their sessions are hidden. */
+    val collapsed: Set<String> = emptySet(),
     /** Why the list is not live, for the user. */
     val error: String? = null,
 )
@@ -46,5 +49,5 @@ val SkiffSession.shownName: String get() = title ?: name
 internal object SkiffWire {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun decode(line: String): List<SkiffSession> = json.decodeFromString<SkiffSnapshot>(line).sessions
+    fun decode(line: String): SkiffSnapshot = json.decodeFromString<SkiffSnapshot>(line)
 }

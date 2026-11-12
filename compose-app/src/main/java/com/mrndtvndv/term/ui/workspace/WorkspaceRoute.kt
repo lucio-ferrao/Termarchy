@@ -53,6 +53,8 @@ import com.mrndtvndv.term.ui.sftp.transfer.SftpTransferManager
 import com.mrndtvndv.term.workspace.SftpBrowserKey
 import com.mrndtvndv.term.workspace.SftpBrowserStore
 import com.mrndtvndv.term.herdr.HerdrAgentStatus
+import androidx.compose.runtime.CompositionLocalProvider
+import com.mrndtvndv.term.ui.keyboard.LocalKeyBarTitle
 import com.mrndtvndv.term.skiff.SkiffPhase
 import com.mrndtvndv.term.skiff.SkiffSession
 import com.mrndtvndv.term.skiff.SkiffSessionState
@@ -151,9 +153,11 @@ fun WorkspaceRoute(
     }.let { cards ->
         if (server.skiff == null) cards else cards.sortedWith(compareBy({ it.group != null }, { it.group }))
     }
+    // the sessions of a folded space are left out, but for the one on screen
+    val shownCards = cards.filter { it.group !in skiffState.collapsed || it.current }
     val tabsButton: @Composable () -> Unit = {
         TabsButton(
-            cards = cards,
+            cards = shownCards,
             onOpenTabs = {
                 // The IME is its own window and would cover the grid, so drop focus and hide it first.
                 focusManager.clearFocus(force = true)
@@ -178,8 +182,10 @@ fun WorkspaceRoute(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // pages in the order of the cards, so swiping goes through the sessions as the grid lists them
+        val tabsById = workspace.tabs.associateBy { it.id }
         WorkspacePager(
-            tabs = workspace.tabs,
+            tabs = shownCards.map { tabsById.getValue(it.id) },
             currentTabId = workspace.activeTabId,
             onSelectTab = { appViewModel.selectTab(workspace.id, it.id) },
             empty = {
@@ -192,18 +198,22 @@ fun WorkspaceRoute(
         ) { tab, isActive ->
             // Terminal pages are edge to edge; the other pages keep the system bars and IME clear.
             when (tab) {
-                is Tab.Terminal -> TerminalTab(
-                    serverId = serverId,
-                    tab = tab,
-                    entry = terminals[tab.id],
-                    isActive = isActive && !gridVisible,
-                    appViewModel = appViewModel,
-                    workspaceViewModel = workspaceViewModel,
-                    settings = settings,
-                    appearance = appearance,
-                    paneCallbacks = paneCallbacks,
-                    tabsButton = tabsButton,
-                )
+                is Tab.Terminal -> CompositionLocalProvider(
+                    LocalKeyBarTitle provides cards.firstOrNull { it.id == tab.id }?.title,
+                ) {
+                    TerminalTab(
+                        serverId = serverId,
+                        tab = tab,
+                        entry = terminals[tab.id],
+                        isActive = isActive && !gridVisible,
+                        appViewModel = appViewModel,
+                        workspaceViewModel = workspaceViewModel,
+                        settings = settings,
+                        appearance = appearance,
+                        paneCallbacks = paneCallbacks,
+                        tabsButton = tabsButton,
+                    )
+                }
                 is Tab.Sftp -> Box(modifier = Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
                     SftpTab(
                         appViewModel = appViewModel,
@@ -261,6 +271,10 @@ fun WorkspaceRoute(
                 val name = (workspace.tabs.firstOrNull { it.id == id } as? Tab.Terminal)?.skiffSession ?: return
                 if (space != moved.group) appViewModel.moveSkiffSession(serverId, name, space)
             }
+
+            override fun onToggleGroup(group: String) {
+                appViewModel.setSkiffSpaceCollapsed(serverId, group, group !in skiffState.collapsed)
+            }
         }
         TabsGrid(
             visible = gridVisible,
@@ -279,6 +293,7 @@ fun WorkspaceRoute(
                     ?.let { RemoteBanner("skiff is not reachable: $it") },
             ),
             actions = cardActions,
+            collapsedGroups = skiffState.collapsed,
             preview = { card, modifier ->
                 TabPreview(workspace.tabs.firstOrNull { it.id == card.id }, thumbnails, modifier)
             },

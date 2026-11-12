@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -425,6 +428,9 @@ private fun RowScope.KeyStrip(content: @Composable RowScope.() -> Unit) {
 /** True inside the key bar, where buttons are drawn flat like the keys of the keyboard row (see [KeyBarHomeButton]). */
 val LocalInKeyboardRow = staticCompositionLocalOf { false }
 
+/** The name of the tab the key bar is in, shown at its right end after the keys. */
+val LocalKeyBarTitle = staticCompositionLocalOf<String?> { null }
+
 /**
  * The key bar as one more row of the keyboard under it: full width, on the keyboard's background, its keys drawn
  * like the keyboard's. The tabs button comes first, then the scrolling [keys], then [hostActions], fixed at the end
@@ -459,6 +465,16 @@ private fun KeyboardRow(
             ) {
                 tabsButton?.invoke()
                 KeyStrip(content = keys)
+                LocalKeyBarTitle.current?.let { title ->
+                    Text(
+                        title,
+                        modifier = Modifier.widthIn(max = 160.dp).padding(start = 8.dp, end = 4.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        textAlign = TextAlign.End,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 hostActions()
             }
         }
