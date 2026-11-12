@@ -505,10 +505,15 @@ private fun ForwardKey(forward: PortForward, onStop: (PortForward) -> Unit) {
 
 /**
  * The button that opens the tabs (or Herdr's agents) as the first key of the key bar: Termarchy's icon, flat in the key
- * color, with [badge] over it (a tab count, a status dot).
+ * color, or [icon] in its place, with [badge] over it (a tab count, a status dot).
  */
 @Composable
-fun KeyBarHomeButton(description: String, onClick: () -> Unit, badge: @Composable BoxScope.() -> Unit = {}) {
+fun KeyBarHomeButton(
+    description: String,
+    onClick: () -> Unit,
+    icon: (@Composable () -> Unit)? = null,
+    badge: @Composable BoxScope.() -> Unit = {},
+) {
     Box(
         modifier = Modifier
             .size(width = HomeButtonWidth, height = BarHeight)
@@ -516,7 +521,7 @@ fun KeyBarHomeButton(description: String, onClick: () -> Unit, badge: @Composabl
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
+        icon?.invoke() ?: Icon(
             painter = painterResource(R.drawable.ic_launcher_monochrome),
             contentDescription = null,
             modifier = Modifier.size(HomeButtonWidth),

@@ -144,9 +144,16 @@ fun WorkspaceRoute(
     val canAddGit = server.sshSession != null
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val singleServer = LocalSingleRemoteServer.current
+    // a skiff server's sessions come grouped by space, those without one first, each group in tab order
+    val cards = workspace.tabs.map { tab ->
+        tabCard(tab, terminals, tab.id == workspace.activeTabId, singleServer, skiffSessions)
+    }.let { cards ->
+        if (server.skiff == null) cards else cards.sortedWith(compareBy({ it.group != null }, { it.group }))
+    }
     val tabsButton: @Composable () -> Unit = {
         TabsButton(
-            tabCount = workspace.tabs.size,
+            cards = cards,
             onOpenTabs = {
                 // The IME is its own window and would cover the grid, so drop focus and hide it first.
                 focusManager.clearFocus(force = true)
@@ -237,13 +244,6 @@ fun WorkspaceRoute(
             ) {
                 tabsButton()
             }
-        }
-        val singleServer = LocalSingleRemoteServer.current
-        // a skiff server's sessions come grouped by space, those without one first, each group in tab order
-        val cards = workspace.tabs.map { tab ->
-            tabCard(tab, terminals, tab.id == workspace.activeTabId, singleServer, skiffSessions)
-        }.let { cards ->
-            if (server.skiff == null) cards else cards.sortedWith(compareBy({ it.group != null }, { it.group }))
         }
         // a session dropped among another space's cards moves to that space
         val cardActions = if (server.skiff == null) gridActions else object : TabsGridActions by gridActions {
