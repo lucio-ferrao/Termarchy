@@ -156,14 +156,24 @@ class TabReorderState(private val gridState: LazyGridState) {
         order = next
     }
 
-    /** The other card whose bounds hold the dragged card's center. Slot space, like the layout offsets. */
+    /**
+     * The other card whose bounds hold the dragged card's center, or else the nearest one: over a heading or the
+     * empty end of a row, such as beside a group's only card, the card lands by the closest. Slot space, like the
+     * layout offsets.
+     */
     private fun targetUnderPointer(id: String): String? {
         val layout = gridState.layoutInfo.visibleItemsInfo
         val dragged = layout.firstOrNull { it.key == id } ?: return null
         val center = startSlot + (pointer - startPointer) +
             Offset(dragged.size.width / 2f, dragged.size.height / 2f)
-        return layout.firstOrNull { it.key != id && contains(it, center) }?.key as? String
+        val cards = layout.filter { it.key != id && it.key in knownIds }
+        val under = cards.firstOrNull { contains(it, center) }
+            ?: cards.minByOrNull { (centerOf(it) - center).getDistanceSquared() }
+        return under?.key as? String
     }
+
+    private fun centerOf(item: LazyGridItemInfo): Offset =
+        Offset(item.offset.x + item.size.width / 2f, item.offset.y + item.size.height / 2f)
 
     private fun reset() {
         draggingId = null
