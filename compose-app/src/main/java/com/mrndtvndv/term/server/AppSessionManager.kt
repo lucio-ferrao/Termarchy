@@ -121,8 +121,8 @@ class AppSessionManager private constructor(context: Context) : AppSessionManage
     }
 
     /**
-     * Tells when a skiff session finishes (ready) or asks, as the system notification of a terminal: with the app in
-     * the background only, and never on connecting, for states that were already so.
+     * Tells when a skiff session asks (not when it finishes), as the system notification of a terminal: with the app
+     * in the background only, and never on connecting, for questions already asked.
      */
     private suspend fun notifySkiffStates(server: Server, skiff: SkiffClient) {
         var known: Map<String, SkiffSessionState>? = null
@@ -131,14 +131,9 @@ class AppSessionManager private constructor(context: Context) : AppSessionManage
             known = state.sessions.associate { it.name to it.state }
             if (before == null) return@collect
             state.sessions.forEach { session ->
-                val body = when (session.state) {
-                    SkiffSessionState.Ready -> "Done"
-                    SkiffSessionState.Asking -> "Needs your input"
-                    else -> return@forEach
-                }
-                if (before[session.name] == session.state) return@forEach
+                if (session.state != SkiffSessionState.Asking || before[session.name] == session.state) return@forEach
                 val destination = NotificationDestination.SkiffSession(server.config.id, session.name)
-                deliverTerminalNotification(session.shownName, body, destination, inApp = false)
+                deliverTerminalNotification(session.shownName, "Needs your input", destination, inApp = false)
             }
         }
     }
