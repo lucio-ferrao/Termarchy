@@ -85,10 +85,11 @@ fun TerminalTab(
             else -> null
         }
     }
-    val passwordInput = herdrPane?.passwordInput == true
     // A skiff session on screen has been seen: its finished agent stops being "ready".
     val skiff = appViewModel.getServer(serverId)?.skiff
     val skiffState by (skiff?.state ?: flowOf(SkiffState())).collectAsStateWithLifecycle(initialValue = SkiffState())
+    val passwordInput = herdrPane?.passwordInput == true ||
+        tab.skiffSession != null && skiffState.sessions.any { it.name == tab.skiffSession && it.input == "password" }
     val skiffReady = tab.skiffSession != null &&
         skiffState.sessions.any { it.name == tab.skiffSession && it.state == SkiffSessionState.Ready }
     LaunchedEffect(isActive, skiffReady) {
