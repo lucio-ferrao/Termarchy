@@ -1,6 +1,7 @@
 package com.mrndtvndv.term.ui.workspace
 
 import android.content.ClipData
+import android.content.res.Configuration
 import android.graphics.Typeface
 import android.view.KeyEvent
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -238,12 +240,19 @@ fun TerminalPane(
     }
 }
 
-/** Coming back to the terminal (its tab shown again, or the app back in front), the keyboard opens. */
+/**
+ * Coming back to the terminal (its tab shown again, or the app back in front), the keyboard opens; not with a hardware
+ * keyboard connected, which types already.
+ */
 @Composable
 private fun ShowKeyboardOnReturn(session: TerminalSession, imeController: TerminalImeController, isTerminalActive: Boolean) {
     val isLifecycleResumed by rememberLifecycleResumed()
+    val context = LocalContext.current
     LaunchedEffect(session, isTerminalActive, isLifecycleResumed) {
         if (!isTerminalActive || !isLifecycleResumed) return@LaunchedEffect
+        val configuration = context.resources.configuration
+        if (configuration.keyboard == Configuration.KEYBOARD_QWERTY &&
+            configuration.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO) return@LaunchedEffect
         withFrameNanos { }
         imeController.show()
     }
