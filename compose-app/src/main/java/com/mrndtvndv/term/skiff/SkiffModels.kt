@@ -29,6 +29,8 @@ data class SkiffSession(
     val cwd: String? = null,
     /** "password" while the program in it reads a line without showing it, as a password prompt does. */
     val input: String? = null,
+    /** The link to the Claude conversation in it on claude.ai, to go on with it in the Claude app. */
+    @SerialName("claude_url") val claudeUrl: String? = null,
 )
 
 /** The list `skiff watch` writes: the sessions, and the spaces shown folded, their sessions hidden. */

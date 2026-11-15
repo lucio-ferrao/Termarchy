@@ -11,7 +11,8 @@ import com.mrndtvndv.term.service.isAllowedCaller
 
 /**
  * Serves [AgentStates] to the Keyarchy launcher, live (it observes [uri]), one row per pane with a shortcut: the
- * shortcut's id, the status, whether it is active and since when. Only Keyarchy may read it, by the UID Android stamps
+ * shortcut's id, the status, whether it is active, since when and, for a skiff session, the claude.ai link of its
+ * Claude conversation. Only Keyarchy may read it, by the UID Android stamps
  * on the call; any other caller gets a [SecurityException].
  */
 class AgentStateProvider : ContentProvider() {
@@ -22,7 +23,9 @@ class AgentStateProvider : ContentProvider() {
         val packages = context?.packageManager?.getPackagesForUid(Binder.getCallingUid())
         if (!isAllowedCaller(packages)) throw SecurityException("Only Keyarchy may read the agents of Termarchy")
         return MatrixCursor(COLUMNS).apply {
-            AgentStates.all().forEach { addRow(arrayOf<Any>(it.shortcutId, it.status, if (it.active) 1 else 0, it.since)) }
+            AgentStates.all().forEach {
+                addRow(arrayOf<Any?>(it.shortcutId, it.status, if (it.active) 1 else 0, it.since, it.claudeUrl))
+            }
         }
     }
 
@@ -34,7 +37,7 @@ class AgentStateProvider : ContentProvider() {
         throw UnsupportedOperationException()
 
     companion object {
-        private val COLUMNS = arrayOf("id", "status", "active", "since")
+        private val COLUMNS = arrayOf("id", "status", "active", "since", "claude_url")
 
         /** What Keyarchy reads and observes: content://<package>.agents/agents. */
         fun uri(context: Context): Uri = Uri.parse("content://${context.packageName}.agents/agents")

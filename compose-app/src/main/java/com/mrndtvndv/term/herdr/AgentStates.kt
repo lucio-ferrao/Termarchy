@@ -10,6 +10,8 @@ data class AgentState(
     val active: Boolean,
     /** When the agent's state last changed, wall-clock millis; 0 when unknown. */
     val since: Long,
+    /** The link to the agent's Claude conversation on claude.ai, for a skiff session that has one. */
+    val claudeUrl: String? = null,
 )
 
 /** The state of a pane's shortcut, for [AgentStates]. */

@@ -52,7 +52,8 @@ class SkiffShortcutPublisher(private val context: Context, private val serverId:
             if (added.isNotEmpty()) manager.addDynamicShortcuts(added)
             if (updated.isNotEmpty()) manager.updateShortcuts(updated)
             val states = chosen.map { session ->
-                AgentState(skiffShortcutId(serverId, session.name), session.herdrStatus, session.active, session.since ?: 0L)
+                AgentState(skiffShortcutId(serverId, session.name), session.herdrStatus, session.active, session.since ?: 0L,
+                    session.claudeUrl)
             }
             if (AgentStates.set(statesKey(), states)) AgentStateProvider.notifyChanged(context)
         }.onFailure { Log.w(TAG, "Could not publish the skiff shortcuts of $serverId", it) }
