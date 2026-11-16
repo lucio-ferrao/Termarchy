@@ -167,6 +167,26 @@ fun WorkspaceRoute(
         )
     }
     val selectedTab = workspace.tabs.firstOrNull { it.id == workspace.activeTabId }
+    // A terminal floats over the one on screen until closed: chosen from its card's menu, a skiff session an agent
+    // just typed into (its "shown" time, recent and newer than the last one seen) or one reading a password.
+    var floatedTab by rememberSaveable(workspaceId) { mutableStateOf<String?>(null) }
+    val skiffTabs = workspace.tabs.filterIsInstance<Tab.Terminal>().filter { it.skiffSession != null }
+    val askingTab = skiffTabs.firstOrNull { skiffSessions[it.skiffSession]?.input == "password" }
+    LaunchedEffect(askingTab?.id) {
+        if (askingTab != null && askingTab.id != workspace.activeTabId) floatedTab = askingTab.id
+    }
+    val lastShown = remember { mutableMapOf<String, Long>() }
+    LaunchedEffect(skiffTabs.map { it.id to skiffSessions[it.skiffSession]?.shown }) {
+        val now = System.currentTimeMillis()
+        skiffTabs.forEach { tab ->
+            val shown = skiffSessions[tab.skiffSession]?.shown ?: return@forEach
+            val new = shown > (lastShown[tab.id] ?: 0L) && now - shown < SHOWN_RECENT_MS
+            lastShown[tab.id] = shown
+            if (new && tab.id != workspace.activeTabId) floatedTab = tab.id
+        }
+    }
+    val floatingTab = (workspace.tabs.firstOrNull { it.id == floatedTab && it.id != workspace.activeTabId } as? Tab.Terminal)
+        ?.takeIf { !gridVisible }
     if (server.skiff != null && skiffState.phase == SkiffPhase.Live) {
         // keyed on the server too: a new connection has no terminals yet
         LaunchedEffect(workspaceId, server, skiffSessions.keys) {
@@ -205,7 +225,7 @@ fun WorkspaceRoute(
                         serverId = serverId,
                         tab = tab,
                         entry = terminals[tab.id],
-                        isActive = isActive && !gridVisible,
+                        isActive = isActive && !gridVisible && floatingTab == null,
                         appViewModel = appViewModel,
                         workspaceViewModel = workspaceViewModel,
                         settings = settings,
@@ -245,6 +265,41 @@ fun WorkspaceRoute(
                 }
             }
         }
+        if (floatingTab != null) {
+            FloatingTerminal(
+                title = floatingTab.skiffSession?.let(skiffSessions::get)?.shownName ?: floatingTab.name ?: "terminal",
+                asking = floatingTab == askingTab,
+                onClose = { floatedTab = null },
+            ) {
+                // its own zoom: the font size it shows and pinches is floatingFontSize, the rest of the settings shared
+                TerminalTab(
+                    serverId = serverId,
+                    tab = floatingTab,
+                    entry = terminals[floatingTab.id],
+                    isActive = true,
+                    appViewModel = appViewModel,
+                    workspaceViewModel = workspaceViewModel,
+                    settings = settings.copy(fontSize = settings.floatingFontSize ?: settings.fontSize),
+                    appearance = appearance,
+                    paneCallbacks = { session ->
+                        val shared = paneCallbacks(session)
+                        TerminalPaneCallbacks(
+                            onUploadMedia = shared.onUploadMedia,
+                            onUploadFile = shared.onUploadFile,
+                            onCommitContent = shared.onCommitContent,
+                            onOpenUrl = shared.onOpenUrl,
+                            onUpdateSettings = { change ->
+                                shared.onUpdateSettings { current ->
+                                    val changed = change(current.copy(fontSize = current.floatingFontSize ?: current.fontSize))
+                                    changed.copy(fontSize = current.fontSize, floatingFontSize = changed.fontSize)
+                                }
+                            },
+                        )
+                    },
+                    tabsButton = null,
+                )
+            }
+        }
         if (!gridVisible && needsOverlayTabsButton(selectedTab, terminals, navigator)) {
             Box(
                 modifier = Modifier
@@ -256,7 +311,7 @@ fun WorkspaceRoute(
             }
         }
         // a session dropped among another space's cards moves to that space
-        val cardActions = if (server.skiff == null) gridActions else object : TabsGridActions by gridActions {
+        val groupedActions = if (server.skiff == null) gridActions else object : TabsGridActions by gridActions {
             override fun onMoveTab(id: String, toIndex: Int) {
                 val moved = cards.firstOrNull { it.id == id } ?: return
                 val others = cards.filter { it.id != id }
@@ -274,6 +329,12 @@ fun WorkspaceRoute(
 
             override fun onToggleGroup(group: String) {
                 appViewModel.setSkiffSpaceCollapsed(serverId, group, group !in skiffState.collapsed)
+            }
+        }
+        val cardActions = object : TabsGridActions by groupedActions {
+            override fun onFloatTab(id: String) {
+                floatedTab = id
+                gridVisible = false
             }
         }
         TabsGrid(
@@ -490,3 +551,6 @@ private val SkiffSessionState.asHerdr: HerdrAgentStatus
         SkiffSessionState.Asking -> HerdrAgentStatus.Blocked
         SkiffSessionState.Ready -> HerdrAgentStatus.Done
     }
+
+/** An agent typing into a skiff session longer ago than this (a label left from before) no longer floats it. */
+private const val SHOWN_RECENT_MS = 60_000L

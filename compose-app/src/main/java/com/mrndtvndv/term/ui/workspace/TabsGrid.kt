@@ -156,6 +156,9 @@ interface TabsGridActions {
     fun onCloseTab(id: String)
     fun onMoveTab(id: String, toIndex: Int)
     fun onRenameTab(id: String)
+
+    /** Shows a terminal tab floating over the one on screen. */
+    fun onFloatTab(id: String) {}
     fun onNewTab(type: TabType)
     fun onWorkspaceMenu(action: WorkspaceMenuAction)
     fun onOpenSettings()
@@ -279,6 +282,7 @@ private fun TabCardGrid(
                     onSelect = { actions.onSelectTab(tab.id) },
                     onClose = { actions.onCloseTab(tab.id) },
                     onRename = { actions.onRenameTab(tab.id) }.takeIf { tab.kind == TabKind.Terminal && !tab.remote },
+                    onFloat = { actions.onFloatTab(tab.id) }.takeIf { tab.kind == TabKind.Terminal && !tab.current },
                     preview = preview,
                 )
             }
@@ -515,7 +519,7 @@ private fun NewTabButton(canAddSftp: Boolean, canAddGit: Boolean, onNewTab: (Tab
 
 /**
  * A card: a tap opens its tab; a long press lifts it to drag, and released where it was, opens its menu (close,
- * rename). Remote cards, whose order is shared, only open the menu.
+ * rename, float). Remote cards, whose order is shared, only open the menu.
  */
 @Composable
 private fun LazyGridItemScope.TabGridCard(
@@ -524,6 +528,7 @@ private fun LazyGridItemScope.TabGridCard(
     onSelect: () -> Unit,
     onClose: () -> Unit,
     onRename: (() -> Unit)?,
+    onFloat: (() -> Unit)?,
     preview: @Composable (tab: TabCard, modifier: Modifier) -> Unit,
 ) {
     val colorScheme = MaterialTheme.colorScheme
@@ -600,6 +605,12 @@ private fun LazyGridItemScope.TabGridCard(
                 DropdownMenuItem(text = { Text("Rename") }, onClick = {
                     menuOpen = false
                     onRename()
+                })
+            }
+            if (onFloat != null) {
+                DropdownMenuItem(text = { Text("Float") }, onClick = {
+                    menuOpen = false
+                    onFloat()
                 })
             }
             DropdownMenuItem(text = { Text("Close") }, onClick = {

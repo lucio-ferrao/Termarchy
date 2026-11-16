@@ -45,6 +45,7 @@ import com.mrndtvndv.term.herdr.KeyboardContext
 import com.mrndtvndv.term.data.prefs.AppSettings
 import com.mrndtvndv.term.data.prefs.KeyBarHostAction
 import com.mrndtvndv.term.server.TerminalProgress
+import com.mrndtvndv.term.ui.keyboard.LocalFloatingTerminal
 import com.mrndtvndv.term.ui.keyboard.KeyBar
 import com.mrndtvndv.term.ui.keyboard.ModifierKeys
 import com.mrndtvndv.term.ui.keyboard.sendKeyBarMacro
@@ -189,7 +190,7 @@ fun TerminalPane(
             imeController = imeController,
             onLineSubmitted = onLineSubmitted,
             wallpaperConfig = appearance.wallpaper,
-            contentTopInsetPx = WindowInsets.statusBars.getTop(density),
+            contentTopInsetPx = if (LocalFloatingTerminal.current) 0 else WindowInsets.statusBars.getTop(density),
             contentBottomInsetPx = keyBarInsetPx(
                 canvasBounds,
                 keyBarTop,
@@ -202,7 +203,7 @@ fun TerminalPane(
                 updatePaneGeometry(coordinates, keyBarCoords, pillCoords)
             },
         )
-        KeyBar(
+        if (!LocalFloatingTerminal.current) KeyBar(
             modifiers = modifierKeys,
             layout = settings.keyBarLayout,
             onKey = { keyCode ->

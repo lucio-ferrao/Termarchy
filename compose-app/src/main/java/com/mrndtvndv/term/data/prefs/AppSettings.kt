@@ -35,4 +35,6 @@ data class AppSettings(
     val wallpaperOpacity: Float,
     val wallpaperScaling: WallpaperScaling,
     val wallpaperId: Long,
+    /** The font size of the terminal floating over the one on screen, zoomed apart from it; null: the same. */
+    val floatingFontSize: Int? = null,
 )

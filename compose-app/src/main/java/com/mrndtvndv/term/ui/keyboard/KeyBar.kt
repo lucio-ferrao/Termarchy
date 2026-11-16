@@ -431,6 +431,9 @@ val LocalInKeyboardRow = staticCompositionLocalOf { false }
 /** The name of the tab the key bar is in, shown at its right end after the keys. */
 val LocalKeyBarTitle = staticCompositionLocalOf<String?> { null }
 
+/** A terminal floating over another (FloatingTerminal): no key bar, and no room left for the status bar. */
+val LocalFloatingTerminal = staticCompositionLocalOf { false }
+
 /**
  * The key bar as one more row of the keyboard under it: full width, on the keyboard's background, its keys drawn
  * like the keyboard's. The tabs button comes first, then the scrolling [keys], then [hostActions], fixed at the end

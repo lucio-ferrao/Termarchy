@@ -15,6 +15,7 @@ private object Key {
     const val Theme = "app_theme"
     const val AmoledBlack = "amoled_black"
     const val FontSize = "font_size"
+    const val FloatingFontSize = "floating_font_size"
     const val KeyboardResizeDebounceMs = "keyboard_resize_debounce_ms"
     const val UnconditionalSoftKeyboardOnTap = "unconditional_soft_keyboard_on_tap"
     const val AutoShowKeyboardOnTap = "auto_show_soft_keyboard_on_tap"
@@ -66,6 +67,7 @@ private fun SharedPreferences.Editor.write(settings: AppSettings) {
     putString(Key.Theme, settings.theme)
     putBoolean(Key.AmoledBlack, settings.amoledBlack)
     putInt(Key.FontSize, settings.fontSize)
+    settings.floatingFontSize?.let { putInt(Key.FloatingFontSize, it) } ?: remove(Key.FloatingFontSize)
     putInt(Key.KeyboardResizeDebounceMs, settings.keyboardResizeDebounceMs)
     putBoolean(Key.UnconditionalSoftKeyboardOnTap, settings.unconditionalSoftKeyboardOnTap)
     putBoolean(Key.AutoShowKeyboardOnTap, settings.autoShowKeyboardOnTap)
@@ -146,11 +148,13 @@ class AppPreferences(
             wallpaperOpacity = prefs.getFloat(Key.WallpaperOpacity, TerminalWallpaperConfig.DefaultBackgroundOpacity),
             wallpaperScaling = wallpaperScalingFromPref(prefs.getString(Key.WallpaperScaling, null)),
             wallpaperId = prefs.getLong(Key.WallpaperId, 0L),
+            floatingFontSize = if (prefs.contains(Key.FloatingFontSize)) prefs.getInt(Key.FloatingFontSize, 0) else null,
         ),
     )
 
     private fun normalize(settings: AppSettings): AppSettings = settings.copy(
         fontSize = settings.fontSize.coerceIn(fontSizeRange),
+        floatingFontSize = settings.floatingFontSize?.coerceIn(fontSizeRange),
         keyboardResizeDebounceMs = settings.keyboardResizeDebounceMs.coerceIn(0, MaxKeyboardResizeDebounceMillis),
         wallpaperOpacity = settings.wallpaperOpacity.coerceIn(0f, 1f),
         keyBarLayout = settings.keyBarLayout.normalized(),
