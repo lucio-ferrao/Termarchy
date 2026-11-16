@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
@@ -528,6 +529,12 @@ private data class SelectionMagnifierRequest(
 )
 
 /** Creates and owns a GLES surface controller for a composable host. */
+/**
+ * A terminal drawn over another one (a floating window): its GL surface goes above the other surfaces of the window,
+ * which otherwise may come out on top, the floating terminal then showing the one below.
+ */
+val LocalTerminalSurfaceOnTop = staticCompositionLocalOf { false }
+
 @Composable
 fun rememberGlesTerminalSurface(
     surfaceKey: Any? = Unit,
@@ -560,9 +567,10 @@ fun GlesTerminalSurface(
     val lifecycle = lifecycleOwner.lifecycle
     key(surface) {
         val stableHeight = remember { StableSurfaceHeight() }
+        val onTop = LocalTerminalSurfaceOnTop.current
         AndroidView(
             modifier = modifier.stableSurfaceHeight(stableHeight),
-            factory = { GlesTerminalSurfaceView(context, surface) },
+            factory = { GlesTerminalSurfaceView(context, surface).apply { if (onTop) setZOrderMediaOverlay(true) } },
             update = { view ->
                 view.contentDescription = contentDescription
                 view.importantForAccessibility = if (contentDescription == null) {

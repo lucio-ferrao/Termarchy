@@ -21,6 +21,13 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -187,6 +194,103 @@ fun WorkspaceRoute(
     }
     val floatingTab = (workspace.tabs.firstOrNull { it.id == floatedTab && it.id != workspace.activeTabId } as? Tab.Terminal)
         ?.takeIf { !gridVisible }
+    // its shell ended (exit): it closes
+    val floatingEnded = floatingTab?.let { terminals[it.id]?.running == false } == true
+    LaunchedEffect(floatingEnded) { if (floatingEnded) floatedTab = null }
+    // A floating terminal, with its own zoom: the font size it shows and pinches is floatingFontSize, the rest of the
+    // settings shared. Inside the app, or over the other apps.
+    val floatingTerminal: @Composable (Tab.Terminal, TerminalEntry?, AppSettings) -> Unit = { tab, entry, current ->
+        TerminalTab(
+            serverId = serverId,
+            tab = tab,
+            entry = entry,
+            isActive = true,
+            appViewModel = appViewModel,
+            workspaceViewModel = workspaceViewModel,
+            settings = current.copy(fontSize = current.floatingFontSize ?: current.fontSize),
+            appearance = appearance,
+            paneCallbacks = { session ->
+                val shared = paneCallbacks(session)
+                TerminalPaneCallbacks(
+                    onUploadMedia = shared.onUploadMedia,
+                    onUploadFile = shared.onUploadFile,
+                    onCommitContent = shared.onCommitContent,
+                    onOpenUrl = shared.onOpenUrl,
+                    onUpdateSettings = { change ->
+                        shared.onUpdateSettings { stored ->
+                            val changed = change(stored.copy(fontSize = stored.floatingFontSize ?: stored.fontSize))
+                            changed.copy(fontSize = stored.fontSize, floatingFontSize = changed.fontSize)
+                        }
+                    },
+                )
+            },
+            tabsButton = null,
+        )
+    }
+    // With Termarchy in the background (the Claude app in front, say), a session the agent shows or that asks for a
+    // password floats over the other apps instead; coming back, it goes on floating inside.
+    val context = LocalContext.current
+    val overlay = remember { OverlayTerminal(context) }
+    val colorScheme = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val shapes = MaterialTheme.shapes
+    overlay.theme = { inside -> MaterialTheme(colorScheme = colorScheme, typography = typography, shapes = shapes, content = inside) }
+    overlay.content = { tabId ->
+        // the workspace stops composing in the background: what changes is read here
+        val liveTerminals by server.terminals.collectAsState()
+        val liveSettings by container.preferences.settings.collectAsState()
+        val entry = liveTerminals[tabId]
+        // its shell ended (exit): it closes
+        LaunchedEffect(entry?.running) { if (entry?.running == false) overlay.hideSoon() }
+        val liveWorkspace by appViewModel.workspaces.collectAsState()
+        (liveWorkspace.workspaces.firstOrNull { it.id == workspaceId }?.tabs?.firstOrNull { it.id == tabId } as? Tab.Terminal)
+            ?.let { tab -> floatingTerminal(tab, entry, liveSettings) }
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, server) {
+        val lifecycle = lifecycleOwner.lifecycle
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) overlay.tabId?.let { tabId ->
+                floatedTab = tabId
+                overlay.hide()
+            }
+        }
+        lifecycle.addObserver(observer)
+        val scope = MainScope()
+        val askedBefore = mutableSetOf<String>()
+        server.skiff?.state?.let { states ->
+            scope.launch {
+                states.collect { state ->
+                    val background = !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+                    // the workspace stops composing in the background: its sessions get their tabs here meanwhile
+                    if (background && state.phase == SkiffPhase.Live) {
+                        appViewModel.syncSkiffTabs(workspaceId, state.sessions.map { it.name })
+                    }
+                    val tabs = appViewModel.workspaces.value.workspaces.firstOrNull { it.id == workspaceId }?.tabs.orEmpty()
+                    // the session shown over the other apps ended: it closes
+                    if (overlay.tabId != null && tabs.none { it.id == overlay.tabId }) overlay.hide()
+                    val sessions = state.sessions.associateBy { it.name }
+                    val now = System.currentTimeMillis()
+                    tabs.filterIsInstance<Tab.Terminal>().forEach { tab ->
+                        val session = tab.skiffSession?.let(sessions::get) ?: return@forEach
+                        val shown = session.shown
+                        val newShown = shown != null && shown > (lastShown[tab.id] ?: 0L) && now - shown < SHOWN_RECENT_MS
+                        val asking = session.input == "password"
+                        val newAsking = asking && askedBefore.add(tab.id)
+                        if (!asking) askedBefore.remove(tab.id)
+                        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@forEach
+                        if (shown != null) lastShown[tab.id] = shown
+                        if (newShown || newAsking || overlay.tabId == tab.id) overlay.show(tab.id, session.shownName, asking)
+                    }
+                }
+            }
+        }
+        onDispose {
+            scope.cancel()
+            lifecycle.removeObserver(observer)
+            overlay.hide()
+        }
+    }
     if (server.skiff != null && skiffState.phase == SkiffPhase.Live) {
         // keyed on the server too: a new connection has no terminals yet
         LaunchedEffect(workspaceId, server, skiffSessions.keys) {
@@ -271,33 +375,7 @@ fun WorkspaceRoute(
                 asking = floatingTab == askingTab,
                 onClose = { floatedTab = null },
             ) {
-                // its own zoom: the font size it shows and pinches is floatingFontSize, the rest of the settings shared
-                TerminalTab(
-                    serverId = serverId,
-                    tab = floatingTab,
-                    entry = terminals[floatingTab.id],
-                    isActive = true,
-                    appViewModel = appViewModel,
-                    workspaceViewModel = workspaceViewModel,
-                    settings = settings.copy(fontSize = settings.floatingFontSize ?: settings.fontSize),
-                    appearance = appearance,
-                    paneCallbacks = { session ->
-                        val shared = paneCallbacks(session)
-                        TerminalPaneCallbacks(
-                            onUploadMedia = shared.onUploadMedia,
-                            onUploadFile = shared.onUploadFile,
-                            onCommitContent = shared.onCommitContent,
-                            onOpenUrl = shared.onOpenUrl,
-                            onUpdateSettings = { change ->
-                                shared.onUpdateSettings { current ->
-                                    val changed = change(current.copy(fontSize = current.floatingFontSize ?: current.fontSize))
-                                    changed.copy(fontSize = current.fontSize, floatingFontSize = changed.fontSize)
-                                }
-                            },
-                        )
-                    },
-                    tabsButton = null,
-                )
+                floatingTerminal(floatingTab, terminals[floatingTab.id], settings)
             }
         }
         if (!gridVisible && needsOverlayTabsButton(selectedTab, terminals, navigator)) {

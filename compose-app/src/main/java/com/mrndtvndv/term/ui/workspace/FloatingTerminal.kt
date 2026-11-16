@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.mrndtvndv.term.ui.keyboard.LocalFloatingTerminal
+import com.termux.terminal.compose.gpu.LocalTerminalSurfaceOnTop
 import kotlin.math.roundToInt
 
 /**
@@ -57,7 +58,7 @@ fun FloatingTerminal(title: String, asking: Boolean, onClose: () -> Unit, termin
         val density = LocalDensity.current
         val maxWidth = constraints.maxWidth.toFloat()
         val maxHeight = constraints.maxHeight.toFloat()
-        val minSize = with(density) { MIN_SIZE.toPx() }
+        val minSize = with(density) { FLOATING_MIN_SIZE.toPx() }
         val margin = with(density) { 8.dp.toPx() }
         var x by remember { mutableFloatStateOf(maxWidth * 0.03f) }
         var y by remember { mutableFloatStateOf(margin) }
@@ -68,69 +69,97 @@ fun FloatingTerminal(title: String, asking: Boolean, onClose: () -> Unit, termin
         val h = height.coerceIn(minSize, maxHeight)
         val left = x.coerceIn(0f, maxWidth - w)
         val top = y.coerceIn(0f, maxHeight - h)
-        val shape = RectangleShape
-            Column(
-                modifier = Modifier
-                    .offset { IntOffset(left.roundToInt(), top.roundToInt()) }
-                    .size(with(density) { w.toDp() }, with(density) { h.toDp() })
-                    .shadow(12.dp, shape)
-                    .clip(shape)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, shape)
-                    .background(MaterialTheme.colorScheme.surface),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(TITLE)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .pointerInput(maxWidth, maxHeight) {
-                            detectDragGestures { _, drag ->
-                                x = (x.coerceIn(0f, maxWidth - width) + drag.x).coerceIn(0f, maxWidth - width)
-                                y = (y.coerceIn(0f, maxHeight - height) + drag.y).coerceIn(0f, maxHeight - height)
-                            }
-                        }
-                        .padding(start = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = if (asking) "$title · password" else title,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Icon(
-                        Icons.Filled.Close,
-                        contentDescription = "Close",
-                        modifier = Modifier.size(TITLE).clickable(onClick = onClose).padding(4.dp),
-                    )
+        FloatingTerminalFrame(
+            title = title,
+            asking = asking,
+            onClose = onClose,
+            modifier = Modifier
+                .offset { IntOffset(left.roundToInt(), top.roundToInt()) }
+                .size(with(density) { w.toDp() }, with(density) { h.toDp() }),
+            titleModifier = Modifier.pointerInput(maxWidth, maxHeight) {
+                detectDragGestures { _, drag ->
+                    x = (x.coerceIn(0f, maxWidth - width) + drag.x).coerceIn(0f, maxWidth - width)
+                    y = (y.coerceIn(0f, maxHeight - height) + drag.y).coerceIn(0f, maxHeight - height)
                 }
-                Box(modifier = Modifier.weight(1f)) {
-                    Box(modifier = Modifier.padding(4.dp)) {
-                        CompositionLocalProvider(LocalFloatingTerminal provides true) { terminal() }
-                    }
-                    Icon(
-                        Icons.Filled.OpenInFull,
-                        contentDescription = "Resize",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(CORNER)
-                            .pointerInput(maxWidth, maxHeight) {
-                                detectDragGestures { _, drag ->
-                                    width = (width.coerceIn(minSize, maxWidth) + drag.x).coerceIn(minSize, maxWidth - x)
-                                    height = (height.coerceIn(minSize, maxHeight) + drag.y).coerceIn(minSize, maxHeight - y)
-                                }
-                            }
-                            .padding(9.dp)
-                            .rotate(90f),
-                    )
+            },
+            cornerModifier = Modifier.pointerInput(maxWidth, maxHeight) {
+                detectDragGestures { _, drag ->
+                    width = (width.coerceIn(minSize, maxWidth) + drag.x).coerceIn(minSize, maxWidth - x)
+                    height = (height.coerceIn(minSize, maxHeight) + drag.y).coerceIn(minSize, maxHeight - y)
                 }
-            }
+            },
+            terminal = terminal,
+        )
     }
 }
 
-private val TITLE = 24.dp
+/**
+ * How a floating terminal looks, wherever it floats (over the terminal in the app, or over other apps in an
+ * [OverlayTerminal]): a title with the session's name and a close button, the terminal, and a resize mark in the
+ * bottom right corner. [titleModifier] and [cornerModifier] take the drags that move and resize it.
+ */
+@Composable
+fun FloatingTerminalFrame(
+    title: String,
+    asking: Boolean,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    titleModifier: Modifier = Modifier,
+    cornerModifier: Modifier = Modifier,
+    terminal: @Composable () -> Unit,
+) {
+    val shape = RectangleShape
+    Column(
+        modifier = modifier
+            .shadow(12.dp, shape)
+            .clip(shape)
+            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
+            .background(MaterialTheme.colorScheme.surface),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(FLOATING_TITLE)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .then(titleModifier)
+                .padding(start = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (asking) "$title · password" else title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = "Close",
+                modifier = Modifier.size(FLOATING_TITLE).clickable(onClick = onClose).padding(4.dp),
+            )
+        }
+        Box(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.padding(4.dp)) {
+                CompositionLocalProvider(LocalFloatingTerminal provides true, LocalTerminalSurfaceOnTop provides true) {
+                    terminal()
+                }
+            }
+            Icon(
+                Icons.Filled.OpenInFull,
+                contentDescription = "Resize",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(FLOATING_CORNER)
+                    .then(cornerModifier)
+                    .padding(9.dp)
+                    .rotate(90f),
+            )
+        }
+    }
+}
+
+val FLOATING_TITLE = 24.dp
 /** The bottom right square that resizes it. */
-private val CORNER = 30.dp
-private val MIN_SIZE = 160.dp
+val FLOATING_CORNER = 30.dp
+val FLOATING_MIN_SIZE = 160.dp
