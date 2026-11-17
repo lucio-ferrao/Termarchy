@@ -594,6 +594,7 @@ class AppViewModel(
         val taken = skiff.state.value.sessions.mapTo(mutableSetOf()) { it.name }
         val name = skiffSessionId(title, taken)
         viewModelScope.launch {
+            skiff.forget(name)
             if (title != name) skiff.rename(name, title)
             openSkiffSession(workspaceId, name)
         }

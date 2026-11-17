@@ -82,6 +82,9 @@ class SkiffClient(private val session: SshSession) {
     /** Names the session, and the Claude conversation in it; [title] null goes back to its zmx name. */
     suspend fun rename(name: String, title: String?) = run("rename", name, title ?: "-")
 
+    /** Drops the title and space a session that ended left under [name], before a new one takes it. */
+    suspend fun forget(name: String) = run("forget", name)
+
     private suspend fun run(vararg args: String): Result<Unit> = try {
         session.execCommand(skiffCommand(*args))
         Result.success(Unit)
