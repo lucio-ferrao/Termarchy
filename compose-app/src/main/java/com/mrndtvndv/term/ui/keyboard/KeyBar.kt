@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.size
@@ -428,8 +429,19 @@ private fun RowScope.KeyStrip(content: @Composable RowScope.() -> Unit) {
 /** True inside the key bar, where buttons are drawn flat like the keys of the keyboard row (see [KeyBarHomeButton]). */
 val LocalInKeyboardRow = staticCompositionLocalOf { false }
 
-/** The name of the tab the key bar is in, shown at its right end after the keys. */
-val LocalKeyBarTitle = staticCompositionLocalOf<String?> { null }
+/**
+ * The name of the tab the key bar is in, shown at its right end after the keys. A tap on it lists [choices] (id to name,
+ * under the heading of their group, the current one marked) and [onChoose] switches to the one picked.
+ */
+data class KeyBarTitle(
+    val title: String,
+    val choices: List<KeyBarChoice> = emptyList(),
+    val onChoose: (String) -> Unit = {},
+)
+
+data class KeyBarChoice(val id: String, val title: String, val group: String?, val current: Boolean)
+
+val LocalKeyBarTitle = staticCompositionLocalOf<KeyBarTitle?> { null }
 
 /** A terminal floating over another (FloatingTerminal): no key bar, and no room left for the status bar. */
 val LocalFloatingTerminal = staticCompositionLocalOf { false }
@@ -468,17 +480,53 @@ private fun KeyboardRow(
             ) {
                 tabsButton?.invoke()
                 KeyStrip(content = keys)
-                LocalKeyBarTitle.current?.let { title ->
+                LocalKeyBarTitle.current?.let { title -> KeyBarTitleText(title) }
+                hostActions()
+            }
+        }
+    }
+}
+
+/** The tab's name at the end of the key bar; with other tabs to go to, a tap opens the menu of [KeyBarTitle.choices]. */
+@Composable
+private fun KeyBarTitleText(title: KeyBarTitle) {
+    var menu by remember { mutableStateOf(false) }
+    val choosable = title.choices.size > 1
+    Box {
+        Text(
+            title.title,
+            modifier = Modifier
+                .widthIn(max = 160.dp)
+                .then(if (choosable) Modifier.clickable(role = Role.Button) { menu = true } else Modifier)
+                .padding(start = 8.dp, end = 4.dp),
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            title.choices.forEachIndexed { index, choice ->
+                if (choice.group != null && choice.group != title.choices.getOrNull(index - 1)?.group) {
                     Text(
-                        title,
-                        modifier = Modifier.widthIn(max = 160.dp).padding(start = 8.dp, end = 4.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        textAlign = TextAlign.End,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        choice.group,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     )
                 }
-                hostActions()
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            choice.title,
+                            fontWeight = if (choice.current) FontWeight.Bold else null,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    onClick = {
+                        menu = false
+                        if (!choice.current) title.onChoose(choice.id)
+                    },
+                )
             }
         }
     }

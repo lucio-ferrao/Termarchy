@@ -61,6 +61,8 @@ import com.mrndtvndv.term.workspace.SftpBrowserKey
 import com.mrndtvndv.term.workspace.SftpBrowserStore
 import com.mrndtvndv.term.herdr.HerdrAgentStatus
 import androidx.compose.runtime.CompositionLocalProvider
+import com.mrndtvndv.term.ui.keyboard.KeyBarChoice
+import com.mrndtvndv.term.ui.keyboard.KeyBarTitle
 import com.mrndtvndv.term.ui.keyboard.LocalKeyBarTitle
 import com.mrndtvndv.term.skiff.SkiffPhase
 import com.mrndtvndv.term.skiff.SkiffSession
@@ -323,7 +325,13 @@ fun WorkspaceRoute(
             // Terminal pages are edge to edge; the other pages keep the system bars and IME clear.
             when (tab) {
                 is Tab.Terminal -> CompositionLocalProvider(
-                    LocalKeyBarTitle provides cards.firstOrNull { it.id == tab.id }?.title,
+                    LocalKeyBarTitle provides cards.firstOrNull { it.id == tab.id }?.let { card ->
+                        KeyBarTitle(
+                            title = card.title,
+                            choices = shownCards.map { KeyBarChoice(it.id, it.title, it.group, it.id == tab.id) },
+                            onChoose = { appViewModel.selectTab(workspace.id, it) },
+                        )
+                    },
                 ) {
                     TerminalTab(
                         serverId = serverId,
