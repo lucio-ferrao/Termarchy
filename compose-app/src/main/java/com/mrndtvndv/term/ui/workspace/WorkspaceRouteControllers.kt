@@ -75,8 +75,10 @@ internal class WorkspaceGridController(
         appViewModel.closeTab(id)
     }
 
-    override fun onMoveTab(id: String, toIndex: Int) {
-        appViewModel.moveTab(id, toIndex)
+    override fun onMoveTab(id: String, targetId: String, after: Boolean) {
+        val others = workspace.tabs.map { it.id }.filter { it != id }
+        val target = others.indexOf(targetId)
+        if (target >= 0) appViewModel.moveTab(id, if (after) target + 1 else target)
     }
 
     override fun onRenameTab(id: String) {

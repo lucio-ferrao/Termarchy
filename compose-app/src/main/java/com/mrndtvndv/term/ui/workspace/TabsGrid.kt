@@ -72,7 +72,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -154,7 +157,8 @@ sealed interface WorkspaceMenuAction {
 interface TabsGridActions {
     fun onSelectTab(id: String)
     fun onCloseTab(id: String)
-    fun onMoveTab(id: String, toIndex: Int)
+    /** Drops tab [id] just before, or just [after], tab [targetId]. */
+    fun onMoveTab(id: String, targetId: String, after: Boolean)
     fun onRenameTab(id: String)
 
     /** Shows a terminal tab floating over the one on screen. */
@@ -244,20 +248,15 @@ private fun TabCardGrid(
             end = 12.dp,
             bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 56.dp + 16.dp + 12.dp,
         ),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
+        verticalArrangement = Arrangement.spacedBy(CARD_GAP),
     ) {
         banner?.let { notice ->
             item(span = { GridItemSpan(maxLineSpan) }) { RemoteBannerRow(notice) }
         }
-        val arranged = reorder.arrange(tabs)
-        // a card being dragged reads as part of the group it is over, the one of the card before it
-        val groups = arranged.mapIndexed { index, tab ->
-            if (tab.id == reorder.draggingId) (arranged.getOrNull(index - 1) ?: arranged.getOrNull(index + 1))?.group else tab.group
-        }
         var group: String? = null
-        arranged.forEachIndexed { index, tab ->
-            val tabGroup = groups[index]
+        tabs.forEach { tab ->
+            val tabGroup = tab.group
             if (tabGroup != null && tabGroup != group) {
                 val heading = tabGroup
                 val folded = heading in collapsedGroups
@@ -274,7 +273,7 @@ private fun TabCardGrid(
             }
             group = tabGroup
             // a folded space shows its heading alone
-            if (tabGroup in collapsedGroups) return@forEachIndexed
+            if (tabGroup in collapsedGroups) return@forEach
             item(key = tab.id) {
                 TabGridCard(
                     tab = tab,
@@ -539,14 +538,15 @@ private fun LazyGridItemScope.TabGridCard(
     }
     val shape = RoundedCornerShape(CARD_CORNER)
     val dragging = reorder.draggingId == tab.id
+    val dropColor = colorScheme.primary
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     val slopPx = with(LocalDensity.current) { 8.dp.toPx() }
     DisposableEffect(tab.id) { onDispose { reorder.release(tab.id) } }
     Box(
         modifier = Modifier
-            // The dragged card keeps its slot without animating, so the translation below is its only motion.
-            .then(if (dragging) Modifier.zIndex(1f).animateItem(placementSpec = null) else Modifier.animateItem())
+            .then(if (dragging) Modifier.zIndex(1f) else Modifier)
+            .animateItem()
             .graphicsLayer {
                 val offset = reorder.translationOf(tab.id)
                 translationX = offset.x
@@ -557,6 +557,14 @@ private fun LazyGridItemScope.TabGridCard(
             }
             .fillMaxWidth()
             .height(180.dp)
+            // where the dragged card would land: a bar in the gap before or after this card
+            .drawWithContent {
+                drawContent()
+                val target = reorder.target?.takeIf { it.id == tab.id } ?: return@drawWithContent
+                val gap = CARD_GAP.toPx() / 2
+                val x = if (target.after) size.width + gap else -gap
+                drawLine(dropColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
+            }
             .alpha(if (finished) 0.6f else 1f)
             .clip(shape)
             .background(colorScheme.surfaceContainerHighest)
@@ -707,4 +715,5 @@ private fun TabIcon(kind: TabKind, title: String, tint: Color, modifier: Modifie
 }
 
 private val CARD_CORNER = 8.dp
+private val CARD_GAP = 8.dp
 private val PREVIEW_CORNER = 4.dp

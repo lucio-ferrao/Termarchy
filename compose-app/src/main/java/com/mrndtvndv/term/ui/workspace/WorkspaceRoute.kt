@@ -396,21 +396,14 @@ fun WorkspaceRoute(
                 tabsButton()
             }
         }
-        // a session dropped among another space's cards moves to that space
+        // a session dropped beside another space's card moves to that space
         val groupedActions = if (server.skiff == null) gridActions else object : TabsGridActions by gridActions {
-            override fun onMoveTab(id: String, toIndex: Int) {
+            override fun onMoveTab(id: String, targetId: String, after: Boolean) {
                 val moved = cards.firstOrNull { it.id == id } ?: return
-                val others = cards.filter { it.id != id }
-                val before = others.getOrNull(toIndex - 1)
-                val after = others.getOrNull(toIndex)
-                val tabIds = workspace.tabs.map { it.id }.filter { it != id }
-                appViewModel.moveTab(
-                    id,
-                    before?.let { tabIds.indexOf(it.id) + 1 } ?: after?.let { tabIds.indexOf(it.id) } ?: tabIds.size,
-                )
-                val space = (before ?: after)?.group
+                val target = cards.firstOrNull { it.id == targetId } ?: return
+                gridActions.onMoveTab(id, targetId, after)
                 val name = (workspace.tabs.firstOrNull { it.id == id } as? Tab.Terminal)?.skiffSession ?: return
-                if (space != moved.group) appViewModel.moveSkiffSession(serverId, name, space)
+                if (target.group != moved.group) appViewModel.moveSkiffSession(serverId, name, target.group)
             }
 
             override fun onToggleGroup(group: String) {

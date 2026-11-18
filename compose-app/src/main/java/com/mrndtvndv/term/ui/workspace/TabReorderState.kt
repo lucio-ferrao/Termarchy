@@ -1,6 +1,5 @@
 package com.mrndtvndv.term.ui.workspace
 
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.grid.LazyGridItemInfo
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.Composable
@@ -12,17 +11,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 
-/** Reorder state for a tab grid. Keeps [tabs] and [onMove] current, and scrolls while a drag nears an edge. */
+/** Reorder state for a tab grid. Keeps [tabs] and [onMove] current. */
 @Composable
 fun rememberTabReorderState(
     gridState: LazyGridState,
     tabs: List<TabCard>,
     visible: Boolean,
-    onMove: (id: String, toIndex: Int) -> Unit,
+    onMove: (id: String, targetId: String, after: Boolean) -> Unit,
 ): TabReorderState {
     val reorder = remember(gridState) { TabReorderState(gridState) }
     SideEffect {
@@ -30,146 +26,92 @@ fun rememberTabReorderState(
         reorder.onMove = onMove
     }
     LaunchedEffect(visible) { if (!visible) reorder.cancel() }
-    val density = LocalDensity.current
-    val edgePx = with(density) { 72.dp.toPx() }
-    val stepPx = with(density) { 14.dp.toPx() }
-    val slopPx = with(density) { 8.dp.toPx() }
-    val draggingId = reorder.draggingId
-    LaunchedEffect(draggingId) {
-        if (draggingId == null) return@LaunchedEffect
-        while (true) {
-            delay(16)
-            val delta = reorder.edgeScrollDelta(edgePx, stepPx, slopPx)
-            if (delta != 0f) {
-                gridState.scrollBy(delta)
-                reorder.refresh()
-            }
-        }
-    }
     return reorder
 }
 
+/** Where a dragged card would land: just before or just after the card [id]. */
+data class DropTarget(val id: String, val after: Boolean)
+
 /**
- * Drag-to-reorder state for the tab grid. Positions are in the grid viewport's coordinates, so they stay
- * valid while the grid scrolls. The dragged card follows the pointer and the others make room as it passes.
- * The model only changes on drop, so the pager never sees the intermediate orders.
+ * Drag-to-reorder state for the tab grid. The dragged card follows the pointer and nothing else moves: the grid
+ * neither scrolls nor makes room, it only marks the [target] the card would land beside. Positions are in the grid
+ * viewport's coordinates. The model only changes on drop.
  */
 class TabReorderState(private val gridState: LazyGridState) {
-    /** Grid viewport. Drag positions arrive relative to the handle and are converted through it. */
+    /** Grid viewport. Drag positions arrive relative to the card and are converted through it. */
     var viewport: LayoutCoordinates? = null
 
     /** Tab ids in display order. Refreshed on every composition. */
     var knownIds: List<String> = emptyList()
 
     /** Reports a drop to the model. Refreshed on every composition. */
-    var onMove: (id: String, toIndex: Int) -> Unit = { _, _ -> }
+    var onMove: (id: String, targetId: String, after: Boolean) -> Unit = { _, _, _ -> }
 
     var draggingId by mutableStateOf<String?>(null)
         private set
 
-    /** Order shown while dragging. */
-    private var order by mutableStateOf<List<String>>(emptyList())
-    private var startOrder: List<String> = emptyList()
+    var target by mutableStateOf<DropTarget?>(null)
+        private set
+
+    private var startIds: List<String> = emptyList()
 
     /** Pointer in viewport coordinates. */
     private var pointer by mutableStateOf(Offset.Zero)
     private var startPointer = Offset.Zero
-    private var startSlot = Offset.Zero
 
     fun start(id: String, source: LayoutCoordinates?, at: Offset) {
         val pointerAt = toViewport(source, at) ?: return
-        val slot = slotOf(id) ?: return
         draggingId = id
-        startOrder = knownIds
-        order = knownIds
+        startIds = knownIds
         startPointer = pointerAt
-        startSlot = slot
         pointer = pointerAt
+        target = null
     }
 
     fun move(source: LayoutCoordinates?, at: Offset) {
-        if (draggingId == null) return
+        val id = draggingId ?: return
         pointer = toViewport(source, at) ?: return
-        reorderUnderPointer()
+        target = targetUnderPointer(id)
     }
 
-    /**
-     * Offset from the card's laid-out slot that keeps it under the pointer. Derived from the live layout each
-     * time, so the card stays put when its slot changes, and when the grid scrolls under it.
-     */
-    fun translationOf(id: String): Offset {
-        if (id != draggingId) return Offset.Zero
-        val slot = slotOf(id) ?: return Offset.Zero
-        return pointer - startPointer + startSlot - slot
-    }
+    /** Offset from the card's slot that keeps it under the pointer. */
+    fun translationOf(id: String): Offset = if (id == draggingId) pointer - startPointer else Offset.Zero
 
-    /** Ends the drag. Reports the new order when it changed and the tab set is unchanged. */
+    /** Ends the drag. Reports the drop when there is a target and the tab set is unchanged. */
     fun drop() {
         val id = draggingId ?: return
-        val stale = knownIds.toSet() != startOrder.toSet()
-        val changed = !stale && order != startOrder
-        val toIndex = order.indexOf(id)
+        val dropped = target?.takeIf { knownIds.toSet() == startIds.toSet() && it.id in knownIds }
         reset()
-        if (changed) onMove(id, toIndex)
+        if (dropped != null) onMove(id, dropped.id, dropped.after)
     }
 
     fun cancel() = reset()
 
-    /** Ends the drag if [id] is the one being dragged, e.g. its grip left composition mid-drag. */
+    /** Ends the drag if [id] is the one being dragged, e.g. its card left composition mid-drag. */
     fun release(id: String) {
         if (draggingId == id) reset()
     }
 
-    /** The cards to lay out: [tabs] with the drag's order applied while dragging. */
-    fun arrange(tabs: List<TabCard>): List<TabCard> {
-        if (draggingId == null) return tabs
-        val byId = tabs.associateBy { it.id }
-        return order.mapNotNull { byId[it] } + tabs.filter { it.id !in order }
-    }
-
-    /**
-     * Scroll step while the pointer is in the top or bottom [edgePx] band and has moved toward that edge by
-     * more than [slopPx] since the drag started. Holding a grip that already sits in a band doesn't scroll.
-     */
-    fun edgeScrollDelta(edgePx: Float, stepPx: Float, slopPx: Float): Float {
-        if (draggingId == null) return 0f
-        val height = viewport?.size?.height?.toFloat() ?: return 0f
-        return when {
-            pointer.y < edgePx && pointer.y < startPointer.y - slopPx -> -stepPx
-            pointer.y > height - edgePx && pointer.y > startPointer.y + slopPx -> stepPx
-            else -> 0f
-        }
-    }
-
-    /** Re-applies the swap for the current pointer, e.g. after the grid scrolled under it. */
-    fun refresh() = reorderUnderPointer()
-
-    private fun reorderUnderPointer() {
-        val id = draggingId ?: return
-        val target = targetUnderPointer(id) ?: return
-        val from = order.indexOf(id)
-        val to = order.indexOf(target)
-        if (from < 0 || to < 0 || from == to) return
-        val next = order.toMutableList()
-        val moved = next.removeAt(from)
-        next.add(to, moved)
-        order = next
-    }
-
     /**
      * The other card whose bounds hold the dragged card's center, or else the nearest one: over a heading or the
-     * empty end of a row, such as beside a group's only card, the card lands by the closest. Slot space, like the
-     * layout offsets.
+     * empty end of a row, such as beside a group's only card, the card lands by the closest. It lands after that card
+     * when its center is below it, or level with it and right of its middle.
      */
-    private fun targetUnderPointer(id: String): String? {
+    private fun targetUnderPointer(id: String): DropTarget? {
         val layout = gridState.layoutInfo.visibleItemsInfo
         val dragged = layout.firstOrNull { it.key == id } ?: return null
-        val center = startSlot + (pointer - startPointer) +
+        val center = Offset(dragged.offset.x.toFloat(), dragged.offset.y.toFloat()) + (pointer - startPointer) +
             Offset(dragged.size.width / 2f, dragged.size.height / 2f)
         val cards = layout.filter { it.key != id && it.key in knownIds }
         val under = cards.firstOrNull { contains(it, center) }
             ?: cards.minByOrNull { (centerOf(it) - center).getDistanceSquared() }
-        return under?.key as? String
+            ?: return null
+        val after = when {
+            center.y > under.offset.y + under.size.height -> true
+            center.y < under.offset.y -> false
+            else -> center.x > centerOf(under).x
+        }
+        return DropTarget(under.key as String, after)
     }
 
     private fun centerOf(item: LazyGridItemInfo): Offset =
@@ -177,14 +119,9 @@ class TabReorderState(private val gridState: LazyGridState) {
 
     private fun reset() {
         draggingId = null
-        order = emptyList()
-        startOrder = emptyList()
+        target = null
+        startIds = emptyList()
     }
-
-    private fun slotOf(id: String): Offset? =
-        gridState.layoutInfo.visibleItemsInfo
-            .firstOrNull { it.key == id }
-            ?.let { Offset(it.offset.x.toFloat(), it.offset.y.toFloat()) }
 
     private fun toViewport(source: LayoutCoordinates?, at: Offset): Offset? {
         val grid = viewport ?: return null
