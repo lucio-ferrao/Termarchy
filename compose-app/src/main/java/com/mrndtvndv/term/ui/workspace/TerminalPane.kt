@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
@@ -113,6 +115,7 @@ private fun Modifier.keyBarLayout(onCoordinates: (LayoutCoordinates) -> Unit): M
  * The key bar sits right on the navigation bar or the keyboard, as one more row of it. Rows stop above the bar through
  * the canvas's bottom inset unless overlay is enabled; the top inset keeps them below the status bar.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Suppress("LongParameterList", "LongMethod")
 @Composable
 fun TerminalPane(
@@ -208,7 +211,8 @@ fun TerminalPane(
         )
         if (!LocalFloatingTerminal.current) KeyBar(
             modifiers = modifierKeys,
-            layout = if (LocalConfiguration.current.hasPhysicalKeyboard()) {
+            // With the on-screen keyboard open, the bar keeps its keys even with a physical keyboard attached.
+            layout = if (LocalConfiguration.current.hasPhysicalKeyboard() && !WindowInsets.isImeVisible) {
                 settings.keyBarLayout.withoutPhysicalKeys()
             } else {
                 settings.keyBarLayout
