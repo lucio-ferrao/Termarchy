@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import com.mrndtvndv.term.ui.keyboard.KeyBarHomeButton
 import com.mrndtvndv.term.ui.keyboard.LocalInKeyboardRow
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -95,6 +94,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlin.math.roundToInt
+import com.mrndtvndv.term.ui.topBarsPadding
 
 private const val SidebarRevealFraction = 0.786f
 private const val SidebarParallaxRatio = 0.30f
@@ -432,7 +432,7 @@ fun HerdrSessionRoute(
                     )
                     is Tab.Viewer -> Column(
                         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)
-                            .statusBarsPadding(),
+                            .topBarsPadding(),
                     ) {
                         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(

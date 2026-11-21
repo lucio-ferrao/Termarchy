@@ -28,6 +28,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sign
 import kotlinx.coroutines.launch
+import com.mrndtvndv.term.ui.topBarsPadding
 
 // Drag past this fraction of the card width to dismiss; release earlier to snap back.
 private const val SwipeDismissThreshold = 0.4f
@@ -94,7 +95,7 @@ private fun NotificationCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
-            .statusBarsPadding()
+            .topBarsPadding()
     ) {
         val cardModifier = Modifier
             .fillMaxWidth()

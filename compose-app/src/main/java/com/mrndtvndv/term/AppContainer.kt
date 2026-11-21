@@ -1,11 +1,11 @@
 package com.mrndtvndv.term
 
 import android.content.Context
+import android.util.DisplayMetrics
 import com.mrndtvndv.term.data.prefs.AppPreferences
 import com.mrndtvndv.term.data.prefs.CustomFontStore
 import com.mrndtvndv.term.server.AppSessionManager
 import com.mrndtvndv.term.workspace.WorkspaceRepository
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,13 +45,14 @@ class AppContainer(context: Context) {
     }
 
     private fun createPreferences(): AppPreferences {
-        val fontSizes = TermuxAppSharedPreferences.getDefaultFontSizes(appContext)
-        val minimumFontSize = fontSizes.getOrElse(1) { 8 }
-        val maximumFontSize = fontSizes.getOrElse(2) { 256 }
+        // The phone's density, not the app's: a process started on an external display takes that display's.
+        val phonePxPerDp = DisplayMetrics.DENSITY_DEVICE_STABLE / DisplayMetrics.DENSITY_DEFAULT.toFloat()
+        // Termux's sizes in dp: 12 by default, 4 at least, and at most the 256 px it allowed on the phone.
         return AppPreferences(
             prefs = appContext.getSharedPreferences("ssh_prefs", Context.MODE_PRIVATE),
-            defaultFontSize = fontSizes.firstOrNull() ?: minimumFontSize,
-            fontSizeRange = minimumFontSize..maximumFontSize,
+            defaultFontSize = 12f,
+            fontSizeRange = 4f..(256 / phonePxPerDp),
+            legacyPxPerDp = phonePxPerDp,
         )
     }
 }

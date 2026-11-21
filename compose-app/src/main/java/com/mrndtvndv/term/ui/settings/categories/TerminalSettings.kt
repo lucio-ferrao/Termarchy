@@ -41,11 +41,11 @@ fun LazyListScope.terminalSettings(state: SettingsState) {
                     NumberRow(
                         title = "Font size",
                         value = state.settings.fontSize,
-                        range = state.fontSizeRange.first.toFloat()..state.fontSizeRange.last.toFloat(),
-                        isFloat = false,
-                        onChange = { value -> state.onUpdate { it.copy(fontSize = value.toInt()) } },
+                        range = state.fontSizeRange,
+                        isFloat = true,
+                        onChange = { value -> state.onUpdate { it.copy(fontSize = value.toFloat()) } },
                         shapes = shapes,
-                        summary = "${state.settings.fontSize} px",
+                        summary = "${state.settings.fontSize} dp",
                     )
                 },
                 { shapes ->

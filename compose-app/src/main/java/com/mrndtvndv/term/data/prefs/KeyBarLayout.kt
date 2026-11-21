@@ -96,6 +96,20 @@ data class KeyBarItem(
 data class KeyBarLayout(val items: List<KeyBarItem>)
 
 /**
+ * The bar with a physical keyboard attached: without what it already has (single keys such as Esc and Tab, Ctrl, Alt,
+ * the arrow joystick) nor the right click, which the mouse has. Text, macros and the Herdr actions stay.
+ */
+fun KeyBarLayout.withoutPhysicalKeys(): KeyBarLayout = KeyBarLayout(
+    items.filter { item ->
+        when (item.tap) {
+            is KeyBarAction.Key, KeyBarAction.Ctrl, KeyBarAction.Alt, KeyBarAction.Joystick, KeyBarAction.RightClick ->
+                false
+            else -> true
+        }
+    },
+)
+
+/**
  * The bar users get when no layout is saved: Esc, Tab, Ctrl, Alt, the arrow joystick, the right click, then the Git
  * and SFTP icons, which only the Herdr route shows.
  */

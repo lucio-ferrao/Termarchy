@@ -14,8 +14,11 @@ import kotlinx.coroutines.flow.asStateFlow
 private object Key {
     const val Theme = "app_theme"
     const val AmoledBlack = "amoled_black"
-    const val FontSize = "font_size"
-    const val FloatingFontSize = "floating_font_size"
+    /** Font sizes in px from before they were kept in dp; read once, converted and removed. */
+    const val LegacyFontSizePx = "font_size"
+    const val LegacyFloatingFontSizePx = "floating_font_size"
+    const val FontSize = "terminal_font_size_dp"
+    const val FloatingFontSize = "floating_terminal_font_size_dp"
     const val KeyboardResizeDebounceMs = "keyboard_resize_debounce_ms"
     const val UnconditionalSoftKeyboardOnTap = "unconditional_soft_keyboard_on_tap"
     const val AutoShowKeyboardOnTap = "auto_show_soft_keyboard_on_tap"
@@ -66,8 +69,10 @@ private fun themeFromPref(value: String?): String =
 private fun SharedPreferences.Editor.write(settings: AppSettings) {
     putString(Key.Theme, settings.theme)
     putBoolean(Key.AmoledBlack, settings.amoledBlack)
-    putInt(Key.FontSize, settings.fontSize)
-    settings.floatingFontSize?.let { putInt(Key.FloatingFontSize, it) } ?: remove(Key.FloatingFontSize)
+    putFloat(Key.FontSize, settings.fontSize)
+    settings.floatingFontSize?.let { putFloat(Key.FloatingFontSize, it) } ?: remove(Key.FloatingFontSize)
+    remove(Key.LegacyFontSizePx)
+    remove(Key.LegacyFloatingFontSizePx)
     putInt(Key.KeyboardResizeDebounceMs, settings.keyboardResizeDebounceMs)
     putBoolean(Key.UnconditionalSoftKeyboardOnTap, settings.unconditionalSoftKeyboardOnTap)
     putBoolean(Key.AutoShowKeyboardOnTap, settings.autoShowKeyboardOnTap)
@@ -92,10 +97,15 @@ private fun SharedPreferences.Editor.write(settings: AppSettings) {
     putLong(Key.WallpaperId, settings.wallpaperId)
 }
 
+/**
+ * [defaultFontSize] and [fontSizeRange] are in dp. [legacyPxPerDp] is the density the old px font sizes were chosen
+ * at (the phone's), to read them as dp.
+ */
 class AppPreferences(
     private val prefs: SharedPreferences,
-    private val defaultFontSize: Int,
-    val fontSizeRange: IntRange,
+    private val defaultFontSize: Float,
+    val fontSizeRange: ClosedFloatingPointRange<Float>,
+    private val legacyPxPerDp: Float,
 ) {
     private val _settings = MutableStateFlow(load())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -120,7 +130,7 @@ class AppPreferences(
         AppSettings(
             theme = themeFromPref(prefs.getString(Key.Theme, null)),
             amoledBlack = prefs.getBoolean(Key.AmoledBlack, true),
-            fontSize = prefs.getInt(Key.FontSize, defaultFontSize),
+            fontSize = loadFontSize(Key.FontSize, Key.LegacyFontSizePx) ?: defaultFontSize,
             keyboardResizeDebounceMs = prefs.getInt(
                 Key.KeyboardResizeDebounceMs,
                 DefaultKeyboardResizeDebounceMillis,
@@ -148,15 +158,24 @@ class AppPreferences(
             wallpaperOpacity = prefs.getFloat(Key.WallpaperOpacity, TerminalWallpaperConfig.DefaultBackgroundOpacity),
             wallpaperScaling = wallpaperScalingFromPref(prefs.getString(Key.WallpaperScaling, null)),
             wallpaperId = prefs.getLong(Key.WallpaperId, 0L),
-            floatingFontSize = if (prefs.contains(Key.FloatingFontSize)) prefs.getInt(Key.FloatingFontSize, 0) else null,
+            floatingFontSize = loadFontSize(Key.FloatingFontSize, Key.LegacyFloatingFontSizePx),
         ),
     )
 
+    private fun loadFontSize(key: String, legacyPxKey: String): Float? = when {
+        prefs.contains(key) -> prefs.getFloat(key, defaultFontSize)
+        prefs.contains(legacyPxKey) -> prefs.getInt(legacyPxKey, 0) / legacyPxPerDp
+        else -> null
+    }
+
     private fun normalize(settings: AppSettings): AppSettings = settings.copy(
-        fontSize = settings.fontSize.coerceIn(fontSizeRange),
-        floatingFontSize = settings.floatingFontSize?.coerceIn(fontSizeRange),
+        fontSize = roundFontSize(settings.fontSize.coerceIn(fontSizeRange)),
+        floatingFontSize = settings.floatingFontSize?.let { roundFontSize(it.coerceIn(fontSizeRange)) },
         keyboardResizeDebounceMs = settings.keyboardResizeDebounceMs.coerceIn(0, MaxKeyboardResizeDebounceMillis),
         wallpaperOpacity = settings.wallpaperOpacity.coerceIn(0f, 1f),
         keyBarLayout = settings.keyBarLayout.normalized(),
     )
 }
+
+/** A font size in dp to one decimal: a step of 2 px from a pinch survives the trip px → dp → px at any density. */
+private fun roundFontSize(dp: Float): Float = kotlin.math.round(dp * 10f) / 10f

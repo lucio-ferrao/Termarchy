@@ -12,7 +12,6 @@ import android.view.FrameMetrics
 import android.view.Window
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import com.mrndtvndv.term.ui.topBarsPadding
 
 private const val DefaultRefreshRate = 60f
 private const val SampleWindowNanos = 1_000_000_000L
@@ -88,7 +88,7 @@ fun DebugHud(modifier: Modifier = Modifier) {
 
     Surface(
         modifier = modifier
-            .statusBarsPadding()
+            .topBarsPadding()
             .padding(8.dp),
         shape = MaterialTheme.shapes.small,
         color = Color.Black.copy(alpha = 0.78f),

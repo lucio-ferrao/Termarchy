@@ -89,6 +89,20 @@ internal class TerminalSelectionState {
         )
     }
 
+    /** Selects from the cell a mouse drag started on to the cell it is over now, in either direction. */
+    fun selectRange(frame: TerminalFrame, anchorColumn: Int, anchorRow: Int, column: Int, row: Int) {
+        val fromRow = anchorRow.coerceIn(minimumSelectableRow(frame), maximumSelectableRow(frame))
+        val toRow = row.coerceIn(minimumSelectableRow(frame), maximumSelectableRow(frame))
+        val fromColumn = validColumn(frame, fromRow, anchorColumn)
+        val toColumn = validColumn(frame, toRow, column)
+        val forward = toRow > fromRow || (toRow == fromRow && toColumn >= fromColumn)
+        if (forward) {
+            update(fromColumn, fromRow, toColumn, toRow)
+        } else {
+            update(toColumn, toRow, fromColumn, fromRow)
+        }
+    }
+
     fun clear() {
         update(selectionStartCol = -1, selectionStartRow = -1, selectionEndCol = -1, selectionEndRow = -1)
     }

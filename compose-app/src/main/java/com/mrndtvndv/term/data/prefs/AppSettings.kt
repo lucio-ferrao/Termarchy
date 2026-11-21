@@ -11,7 +11,8 @@ enum class ArrowJoystickMode { Swipe, Hold }
 data class AppSettings(
     val theme: String,
     val amoledBlack: Boolean,
-    val fontSize: Int,
+    /** Terminal font size in dp, so it keeps its size on a display with another density (an external monitor). */
+    val fontSize: Float,
     val keyboardResizeDebounceMs: Int,
     val unconditionalSoftKeyboardOnTap: Boolean,
     val autoShowKeyboardOnTap: Boolean,
@@ -36,5 +37,5 @@ data class AppSettings(
     val wallpaperScaling: WallpaperScaling,
     val wallpaperId: Long,
     /** The font size of the terminal floating over the one on screen, zoomed apart from it; null: the same. */
-    val floatingFontSize: Int? = null,
+    val floatingFontSize: Float? = null,
 )

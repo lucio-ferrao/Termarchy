@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -44,6 +42,8 @@ import com.mrndtvndv.term.domain.PortForward
 import com.mrndtvndv.term.herdr.KeyboardContext
 import com.mrndtvndv.term.data.prefs.AppSettings
 import com.mrndtvndv.term.data.prefs.KeyBarHostAction
+import com.mrndtvndv.term.data.prefs.withoutPhysicalKeys
+import androidx.compose.ui.platform.LocalConfiguration
 import com.mrndtvndv.term.server.TerminalProgress
 import com.mrndtvndv.term.ui.keyboard.LocalFloatingTerminal
 import com.mrndtvndv.term.ui.keyboard.KeyBar
@@ -58,10 +58,13 @@ import com.termux.terminal.compose.TerminalImeVisibility
 import com.termux.terminal.compose.TerminalWallpaperConfig
 import com.termux.terminal.compose.session.ProgramStatusState
 import kotlin.math.roundToInt
+import com.mrndtvndv.term.ui.topBarsPadding
+import com.mrndtvndv.term.ui.topBars
 
 class TerminalAppearance(
     val typeface: Typeface,
-    val fontSizeRange: IntRange,
+    /** In dp. */
+    val fontSizeRange: ClosedFloatingPointRange<Float>,
     val wallpaper: TerminalWallpaperConfig,
 )
 
@@ -190,7 +193,7 @@ fun TerminalPane(
             imeController = imeController,
             onLineSubmitted = onLineSubmitted,
             wallpaperConfig = appearance.wallpaper,
-            contentTopInsetPx = if (LocalFloatingTerminal.current) 0 else WindowInsets.statusBars.getTop(density),
+            contentTopInsetPx = if (LocalFloatingTerminal.current) 0 else WindowInsets.topBars.getTop(density),
             contentBottomInsetPx = keyBarInsetPx(
                 canvasBounds,
                 keyBarTop,
@@ -205,7 +208,11 @@ fun TerminalPane(
         )
         if (!LocalFloatingTerminal.current) KeyBar(
             modifiers = modifierKeys,
-            layout = settings.keyBarLayout,
+            layout = if (LocalConfiguration.current.hasPhysicalKeyboard()) {
+                settings.keyBarLayout.withoutPhysicalKeys()
+            } else {
+                settings.keyBarLayout
+            },
             onKey = { keyCode ->
                 if (keyCode == KeyEvent.KEYCODE_ENTER) onLineSubmitted()
                 sendKeyCode(session, keyCode, modifierKeys)
@@ -231,7 +238,7 @@ fun TerminalPane(
             },
         )
         TerminalProgressStrip(
-            progress = progress, modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding(),
+            progress = progress, modifier = Modifier.align(Alignment.TopCenter).topBarsPadding(),
         )
         ProgramStatusSheet(
             state = programStatus,
@@ -251,13 +258,15 @@ private fun ShowKeyboardOnReturn(session: TerminalSession, imeController: Termin
     val context = LocalContext.current
     LaunchedEffect(session, isTerminalActive, isLifecycleResumed) {
         if (!isTerminalActive || !isLifecycleResumed) return@LaunchedEffect
-        val configuration = context.resources.configuration
-        if (configuration.keyboard == Configuration.KEYBOARD_QWERTY &&
-            configuration.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO) return@LaunchedEffect
+        if (context.resources.configuration.hasPhysicalKeyboard()) return@LaunchedEffect
         withFrameNanos { }
         imeController.show()
     }
 }
+
+/** A physical keyboard is attached and usable, as on a desktop with an external display. */
+private fun Configuration.hasPhysicalKeyboard(): Boolean =
+    keyboard == Configuration.KEYBOARD_QWERTY && hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
 
 @Composable
 private fun rememberLifecycleResumed(): State<Boolean> {

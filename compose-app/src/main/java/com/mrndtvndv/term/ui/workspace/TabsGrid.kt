@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -102,6 +101,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.delay
+import com.mrndtvndv.term.ui.topBars
 
 enum class TabKind { Terminal, Sftp, Git, Viewer }
 
@@ -244,7 +244,7 @@ private fun TabCardGrid(
         state = gridState,
         contentPadding = PaddingValues(
             start = 12.dp,
-            top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp,
+            top = WindowInsets.topBars.asPaddingValues().calculateTopPadding() + 12.dp,
             end = 12.dp,
             bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 56.dp + 16.dp + 12.dp,
         ),
@@ -669,7 +669,7 @@ private fun TabCardHeader(tab: TabCard, finished: Boolean, contentColor: Color) 
  * idle has no mark.
  */
 @Composable
-private fun StatusMark(status: HerdrAgentStatus) {
+internal fun StatusMark(status: HerdrAgentStatus) {
     val color = agentStatusColor(status)
     val mark = when (status) {
         HerdrAgentStatus.Working -> {

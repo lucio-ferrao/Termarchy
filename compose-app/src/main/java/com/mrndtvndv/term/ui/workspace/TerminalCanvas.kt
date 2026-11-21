@@ -11,6 +11,8 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.roundToInt
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -54,8 +56,10 @@ fun TerminalCanvas(
     session: TerminalSession,
     settings: AppSettings,
     typeface: Typeface,
-    fontSizeRange: IntRange,
-    onFontSizeChange: (Int) -> Unit,
+    /** In dp, as [AppSettings.fontSize]. */
+    fontSizeRange: ClosedFloatingPointRange<Float>,
+    /** In dp. */
+    onFontSizeChange: (Float) -> Unit,
     modifierKeys: ModifierKeys,
     onUploadMedia: () -> Unit,
     onUploadFile: () -> Unit,
@@ -123,8 +127,8 @@ private fun rememberTerminalCanvasConfig(
     session: TerminalSession,
     settings: AppSettings,
     typeface: Typeface,
-    fontSizeRange: IntRange,
-    onFontSizeChange: (Int) -> Unit,
+    fontSizeRange: ClosedFloatingPointRange<Float>,
+    onFontSizeChange: (Float) -> Unit,
     wallpaper: TerminalWallpaperConfig,
     onOpenUrl: (String) -> Unit,
     onCommitContent: (ClipData) -> Boolean,
@@ -137,14 +141,22 @@ private fun rememberTerminalCanvasConfig(
     val context = LocalContext.current
     val cursorEffect = remember(settings.cursorTrail) { settings.cursorTrail.toCursorEffect() }
     val accessibilityEnabled by rememberAccessibilityEnabled(context)
+    // The terminal draws in px of the display the window is on: the dp sizes give the phone and an external monitor
+    // the same size of text for their densities.
+    val pxPerDp = LocalDensity.current.density
+    val fontSizeRangePx = remember(fontSizeRange, pxPerDp) {
+        val minimum = (fontSizeRange.start * pxPerDp).roundToInt().coerceAtLeast(1)
+        minimum..(fontSizeRange.endInclusive * pxPerDp).roundToInt().coerceAtLeast(minimum)
+    }
     return createTerminalCanvasConfig(
         TerminalCanvasConfigInput(
             settings = settings,
-            fontSizeRange = fontSizeRange,
+            fontSizePx = (settings.fontSize * pxPerDp).roundToInt().coerceIn(fontSizeRangePx),
+            fontSizeRange = fontSizeRangePx,
             typeface = typeface,
             cursorEffect = cursorEffect,
             wallpaper = wallpaper,
-            onFontSizeChange = onFontSizeChange,
+            onFontSizeChange = { px -> onFontSizeChange(px / pxPerDp) },
             accessibilityEnabled = accessibilityEnabled,
             session = session,
             onOpenUrl = onOpenUrl,
@@ -233,6 +245,7 @@ private fun rememberModifierKeys(modifierKeys: ModifierKeys): ModifierKeyReader 
 @Suppress("LongParameterList")
 private data class TerminalCanvasConfigInput(
     val settings: AppSettings,
+    val fontSizePx: Int,
     val fontSizeRange: IntRange,
     val typeface: Typeface,
     val cursorEffect: com.termux.terminal.compose.CursorEffect?,
@@ -251,7 +264,7 @@ private data class TerminalCanvasConfigInput(
 
 private fun createTerminalCanvasConfig(input: TerminalCanvasConfigInput): TerminalCanvasConfig =
     TerminalCanvasConfig(
-        fontSize = input.settings.fontSize,
+        fontSize = input.fontSizePx,
         minimumFontSize = input.fontSizeRange.first,
         maximumFontSize = input.fontSizeRange.last,
         typeface = input.typeface,

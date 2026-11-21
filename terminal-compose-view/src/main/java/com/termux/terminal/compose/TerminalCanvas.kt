@@ -60,6 +60,8 @@ import com.termux.terminal.compose.internal.TerminalSelectionState
 import com.termux.terminal.compose.internal.rememberImeHost
 import com.termux.terminal.compose.internal.rememberSelectionHandleColor
 import com.termux.terminal.compose.internal.terminalGestures
+import com.termux.terminal.compose.internal.terminalMouse
+import com.termux.terminal.compose.internal.stepFontSize
 import com.termux.terminal.compose.internal.selectionMagnifierSourceForSelection
 import com.termux.terminal.compose.internal.terminalImeHost
 import com.termux.terminal.compose.internal.terminalTaps
@@ -246,12 +248,22 @@ private fun TerminalCanvasLayout(
             .terminalImeHost(state.imeHost)
             .focusRequester(state.focusRequester)
             .focusTarget()
-            .terminalKeyHandling(state.translator, state.selectionState, state.config)
+            .terminalKeyHandling(state.translator, state.selectionState, state.config) { keyEvent ->
+                handleDesktopShortcut(keyEvent, state)
+            }
     ) {
         val inputModifier = Modifier
             .fillMaxSize()
             .padding(top = topInset)
             .terminalSemantics(state.visibleText, state.config.accessibilityEnabled)
+            .terminalMouse(
+                state.controller,
+                state.metrics,
+                state.config,
+                state.selectionState,
+                state.fontSizeState,
+                state.focusRequester
+            )
             .terminalGestures(
                 state.controller,
                 state.metrics,
@@ -602,13 +614,15 @@ private fun SelectionBackHandler(selectionState: TerminalSelectionState) {
 private fun Modifier.terminalKeyHandling(
     translator: TerminalInputTranslator,
     selectionState: TerminalSelectionState,
-    config: TerminalCanvasConfig
+    config: TerminalCanvasConfig,
+    onShortcut: (android.view.KeyEvent) -> Boolean
 ): Modifier = onPreviewKeyEvent { keyEvent ->
     if (keyEvent.type == KeyEventType.KeyUp) {
         return@onPreviewKeyEvent config.onKeyUp(keyEvent.nativeKeyEvent)
     }
     if (keyEvent.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
     if (config.onKeyDown(keyEvent.nativeKeyEvent)) return@onPreviewKeyEvent true
+    if (onShortcut(keyEvent.nativeKeyEvent)) return@onPreviewKeyEvent true
     if (keyEvent.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
         if (!selectionState.isSelecting) return@onPreviewKeyEvent false
         selectionState.clear()
@@ -616,6 +630,41 @@ private fun Modifier.terminalKeyHandling(
     }
     if (selectionState.isSelecting) selectionState.clear()
     translator.handleKeyEvent(keyEvent.nativeKeyEvent)
+}
+
+/**
+ * The physical keyboard shortcuts of the Ghostty on the PC: Ctrl+Shift+C copies the selection, Ctrl+Shift+V pastes,
+ * Ctrl+= (or Ctrl++) and Ctrl+- step the font size. The character decides, not the key, so any layout works. Only a
+ * physical keyboard: key events an input method sends go to the terminal as before.
+ */
+private fun handleDesktopShortcut(event: android.view.KeyEvent, state: TerminalCanvasState): Boolean {
+    if (event.deviceId == android.view.KeyCharacterMap.VIRTUAL_KEYBOARD) return false
+    if (!event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) return false
+    if (event.isShiftPressed) {
+        when (event.keyCode) {
+            android.view.KeyEvent.KEYCODE_C -> {
+                val selection = state.selectionState.selection
+                if (!selection.isEmpty) state.config.onCopyRequest(state.controller.selectedText(selection))
+                return true
+            }
+            android.view.KeyEvent.KEYCODE_V -> {
+                state.config.onPasteRequest()
+                return true
+            }
+        }
+    }
+    val withoutCtrl = event.metaState and android.view.KeyEvent.META_CTRL_MASK.inv()
+    return when (event.getUnicodeChar(withoutCtrl).toChar()) {
+        '=', '+' -> {
+            stepFontSize(state.fontSizeState, state.config, increase = true)
+            true
+        }
+        '-' -> {
+            stepFontSize(state.fontSizeState, state.config, increase = false)
+            true
+        }
+        else -> false
+    }
 }
 
 private fun Modifier.terminalSemantics(visibleText: String, enabled: Boolean): Modifier =

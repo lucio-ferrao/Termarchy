@@ -8,11 +8,14 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.Button
@@ -75,6 +78,7 @@ import com.termux.terminal.compose.TerminalThumbnail
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import com.mrndtvndv.term.ui.topBarsPadding
 
 class TerminalHostCallbacks(
     val onCommitContent: (TerminalSession, ClipData) -> Boolean,
@@ -307,143 +311,178 @@ fun WorkspaceRoute(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // pages in the order of the cards, so swiping goes through the sessions as the grid lists them
-        val tabsById = workspace.tabs.associateBy { it.id }
-        WorkspacePager(
-            tabs = shownCards.map { tabsById.getValue(it.id) },
-            currentTabId = workspace.activeTabId,
-            onSelectTab = { appViewModel.selectTab(workspace.id, it.id) },
-            empty = {
-                WorkspaceEmptyState(
-                    canAddSftp = canAddSftp,
-                    canAddGit = canAddGit,
-                    onAdd = { appViewModel.addTab(workspace.id, it) },
-                )
-            },
-        ) { tab, isActive ->
-            // Terminal pages are edge to edge; the other pages keep the system bars and IME clear.
-            when (tab) {
-                is Tab.Terminal -> CompositionLocalProvider(
-                    LocalKeyBarTitle provides cards.firstOrNull { it.id == tab.id }?.let { card ->
-                        KeyBarTitle(
-                            title = card.title,
-                            choices = shownCards.map { KeyBarChoice(it.id, it.title, it.group, it.id == tab.id) },
-                            onChoose = { appViewModel.selectTab(workspace.id, it) },
-                        )
-                    },
-                ) {
-                    TerminalTab(
-                        serverId = serverId,
-                        tab = tab,
-                        entry = terminals[tab.id],
-                        isActive = isActive && !gridVisible && floatingTab == null,
-                        appViewModel = appViewModel,
-                        workspaceViewModel = workspaceViewModel,
-                        settings = settings,
-                        appearance = appearance,
-                        paneCallbacks = paneCallbacks,
-                        tabsButton = tabsButton,
-                    )
-                }
-                is Tab.Sftp -> Box(modifier = Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
-                    SftpTab(
-                        appViewModel = appViewModel,
-                        browsers = container.workspaceRepository,
-                        server = server,
-                        navigator = navigator,
-                        tab = tab,
-                        isActive = isActive,
-                        tabsButton = tabsButton,
-                    )
-                }
-                is Tab.Git -> Box(modifier = Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
-                    GitTab(
-                        appViewModel = appViewModel,
-                        server = server,
-                        navigator = navigator,
-                        tab = tab,
-                        onBack = onBack,
-                        tabsButton = tabsButton,
-                    )
-                }
-                is Tab.Viewer -> Box(modifier = Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
-                    ViewerTab(
-                        client = server.sftpClient,
-                        tab = tab,
-                        onClose = { appViewModel.closeTab(tab.id) },
-                        tabsButton = tabsButton,
-                    )
-                }
-            }
+    // a session dropped beside another space's card moves to that space
+    val groupedActions = if (server.skiff == null) gridActions else object : TabsGridActions by gridActions {
+        override fun onMoveTab(id: String, targetId: String, after: Boolean) {
+            val moved = cards.firstOrNull { it.id == id } ?: return
+            val target = cards.firstOrNull { it.id == targetId } ?: return
+            gridActions.onMoveTab(id, targetId, after)
+            val name = (workspace.tabs.firstOrNull { it.id == id } as? Tab.Terminal)?.skiffSession ?: return
+            if (target.group != moved.group) appViewModel.moveSkiffSession(serverId, name, target.group)
         }
-        if (floatingTab != null) {
-            FloatingTerminal(
-                title = floatingTab.skiffSession?.let(skiffSessions::get)?.shownName ?: floatingTab.name ?: "terminal",
-                asking = floatingTab == askingTab,
-                onClose = { floatedTab = null },
-            ) {
-                floatingTerminal(floatingTab, terminals[floatingTab.id], settings)
-            }
-        }
-        if (!gridVisible && needsOverlayTabsButton(selectedTab, terminals, navigator)) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .navigationBarsPadding()
-                    .padding(end = 12.dp, bottom = 16.dp),
-            ) {
-                tabsButton()
-            }
-        }
-        // a session dropped beside another space's card moves to that space
-        val groupedActions = if (server.skiff == null) gridActions else object : TabsGridActions by gridActions {
-            override fun onMoveTab(id: String, targetId: String, after: Boolean) {
-                val moved = cards.firstOrNull { it.id == id } ?: return
-                val target = cards.firstOrNull { it.id == targetId } ?: return
-                gridActions.onMoveTab(id, targetId, after)
-                val name = (workspace.tabs.firstOrNull { it.id == id } as? Tab.Terminal)?.skiffSession ?: return
-                if (target.group != moved.group) appViewModel.moveSkiffSession(serverId, name, target.group)
-            }
 
-            override fun onToggleGroup(group: String) {
-                appViewModel.setSkiffSpaceCollapsed(serverId, group, group !in skiffState.collapsed)
-            }
+        override fun onToggleGroup(group: String) {
+            appViewModel.setSkiffSpaceCollapsed(serverId, group, group !in skiffState.collapsed)
         }
-        val cardActions = object : TabsGridActions by groupedActions {
-            override fun onFloatTab(id: String) {
-                floatedTab = id
-                gridVisible = false
-            }
+    }
+    val cardActions = object : TabsGridActions by groupedActions {
+        override fun onFloatTab(id: String) {
+            floatedTab = id
+            gridVisible = false
         }
-        TabsGrid(
-            visible = gridVisible,
-            workspaces = workspaceState.workspacesFor(serverId).map { item ->
-                WorkspaceItem(item.id, item.name, item.root, item.tabs.size, item.id == workspace.id)
-            },
-            tabs = cards,
-            addOptions = TabAddOptions(
-                canAddSftp = canAddSftp,
-                canAddGit = canAddGit,
-                sessionsOnly = server.skiff != null,
-            ),
-            // the sessions shown are the last ones known while skiff does not answer
-            remote = RemoteGridState(
-                banner = skiffState.error?.takeIf { server.skiff != null && skiffState.phase == SkiffPhase.Unavailable }
-                    ?.let { RemoteBanner("skiff is not reachable: $it") },
-            ),
+    }
+    val addOptions = TabAddOptions(canAddSftp = canAddSftp, canAddGit = canAddGit, sessionsOnly = server.skiff != null)
+    // in desktop mode, the sessions beside the terminal to go from one to another without the grid; on the phone, the
+    // same list is a page left of the first session
+    val sidebarShown = sessionsSidebarShown()
+    val sessionsPage: @Composable (shown: Boolean, showCurrent: () -> Unit) -> Unit = { shown, showCurrent ->
+        // the keyboard of the session left behind would cover the list
+        LaunchedEffect(shown) {
+            if (!shown) return@LaunchedEffect
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+        }
+        SessionsSidebar(
+            cards = shownCards,
             actions = cardActions,
-            collapsedGroups = skiffState.collapsed,
-            preview = { card, modifier ->
-                TabPreview(workspace.tabs.firstOrNull { it.id == card.id }, thumbnails, modifier)
+            addOptions = addOptions,
+            onSelect = { id ->
+                if (id == workspace.activeTabId) showCurrent() else appViewModel.selectTab(workspace.id, id)
             },
+            modifier = Modifier.fillMaxWidth(),
         )
+    }
+    Row(modifier = Modifier.fillMaxSize()) {
+        if (sidebarShown) {
+            SessionsSidebar(
+                cards = shownCards,
+                actions = cardActions,
+                addOptions = addOptions,
+                onSelect = cardActions::onSelectTab,
+                modifier = Modifier.width(SIDEBAR_WIDTH),
+            )
+        }
+        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+            // pages in the order of the cards, so swiping goes through the sessions as the grid lists them; on the
+            // phone from the one on screen on, so that left of any session is always the list
+            val tabsById = workspace.tabs.associateBy { it.id }
+            val pagedCards = if (sidebarShown) {
+                shownCards
+            } else {
+                shownCards.drop(shownCards.indexOfFirst { it.current }.coerceAtLeast(0))
+            }
+            WorkspacePager(
+                tabs = pagedCards.map { tabsById.getValue(it.id) },
+                currentTabId = workspace.activeTabId,
+                onSelectTab = { appViewModel.selectTab(workspace.id, it.id) },
+                leading = sessionsPage.takeUnless { sidebarShown },
+                empty = {
+                    WorkspaceEmptyState(
+                        canAddSftp = canAddSftp,
+                        canAddGit = canAddGit,
+                        onAdd = { appViewModel.addTab(workspace.id, it) },
+                    )
+                },
+            ) { tab, isActive ->
+                // Terminal pages are edge to edge; the other pages keep the system bars and IME clear.
+                when (tab) {
+                    is Tab.Terminal -> CompositionLocalProvider(
+                        LocalKeyBarTitle provides cards.firstOrNull { it.id == tab.id }?.let { card ->
+                            KeyBarTitle(
+                                title = card.title,
+                                choices = shownCards.map { KeyBarChoice(it.id, it.title, it.group, it.id == tab.id) },
+                                onChoose = { appViewModel.selectTab(workspace.id, it) },
+                            )
+                        },
+                    ) {
+                        TerminalTab(
+                            serverId = serverId,
+                            tab = tab,
+                            entry = terminals[tab.id],
+                            isActive = isActive && !gridVisible && floatingTab == null,
+                            appViewModel = appViewModel,
+                            workspaceViewModel = workspaceViewModel,
+                            settings = settings,
+                            appearance = appearance,
+                            paneCallbacks = paneCallbacks,
+                            tabsButton = tabsButton,
+                        )
+                    }
+                    is Tab.Sftp -> Box(modifier = Modifier.fillMaxSize().topBarsPadding().imePadding()) {
+                        SftpTab(
+                            appViewModel = appViewModel,
+                            browsers = container.workspaceRepository,
+                            server = server,
+                            navigator = navigator,
+                            tab = tab,
+                            isActive = isActive,
+                            tabsButton = tabsButton,
+                        )
+                    }
+                    is Tab.Git -> Box(modifier = Modifier.fillMaxSize().topBarsPadding().imePadding()) {
+                        GitTab(
+                            appViewModel = appViewModel,
+                            server = server,
+                            navigator = navigator,
+                            tab = tab,
+                            onBack = onBack,
+                            tabsButton = tabsButton,
+                        )
+                    }
+                    is Tab.Viewer -> Box(modifier = Modifier.fillMaxSize().topBarsPadding().imePadding()) {
+                        ViewerTab(
+                            client = server.sftpClient,
+                            tab = tab,
+                            onClose = { appViewModel.closeTab(tab.id) },
+                            tabsButton = tabsButton,
+                        )
+                    }
+                }
+            }
+            if (floatingTab != null) {
+                FloatingTerminal(
+                    title = floatingTab.skiffSession?.let(skiffSessions::get)?.shownName ?: floatingTab.name ?: "terminal",
+                    asking = floatingTab == askingTab,
+                    onClose = { floatedTab = null },
+                ) {
+                    floatingTerminal(floatingTab, terminals[floatingTab.id], settings)
+                }
+            }
+            if (!gridVisible && needsOverlayTabsButton(selectedTab, terminals, navigator)) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .navigationBarsPadding()
+                        .padding(end = 12.dp, bottom = 16.dp),
+                ) {
+                    tabsButton()
+                }
+            }
+            TabsGrid(
+                visible = gridVisible,
+                workspaces = workspaceState.workspacesFor(serverId).map { item ->
+                    WorkspaceItem(item.id, item.name, item.root, item.tabs.size, item.id == workspace.id)
+                },
+                tabs = cards,
+                addOptions = addOptions,
+                // the sessions shown are the last ones known while skiff does not answer
+                remote = RemoteGridState(
+                    banner = skiffState.error?.takeIf { server.skiff != null && skiffState.phase == SkiffPhase.Unavailable }
+                        ?.let { RemoteBanner("skiff is not reachable: $it") },
+                ),
+                actions = cardActions,
+                collapsedGroups = skiffState.collapsed,
+                preview = { card, modifier ->
+                    TabPreview(workspace.tabs.firstOrNull { it.id == card.id }, thumbnails, modifier)
+                },
+            )
+        }
     }
 }
 
 @Composable
 private fun WorkspaceEmptyState(canAddSftp: Boolean, canAddGit: Boolean, onAdd: (TabType) -> Unit) {
-    Box(modifier = Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
+    Box(modifier = Modifier.fillMaxSize().topBarsPadding().imePadding()) {
         EmptyWorkspace(canAddSftp = canAddSftp, canAddGit = canAddGit, onAdd = onAdd)
     }
 }

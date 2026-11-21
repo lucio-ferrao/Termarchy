@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.shape.CircleShape
@@ -97,6 +96,7 @@ import com.mrndtvndv.term.herdr.panesIn
 import com.mrndtvndv.term.herdr.tabsIn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.mrndtvndv.term.ui.topBarsPadding
 
 /** Full-height Herdr workspace/tab/pane sidebar, backed by the shared socket cache rather than CLI polling. */
 @Suppress("LongMethod", "LongParameterList", "CyclomaticComplexMethod")
@@ -137,7 +137,7 @@ fun HerdrAgentsSidebar(
     Column(
         modifier = Modifier.fillMaxSize()
             .background(palette.panel)
-            .statusBarsPadding()
+            .topBarsPadding()
             .navigationBarsPadding()
             .imePadding(),
     ) {

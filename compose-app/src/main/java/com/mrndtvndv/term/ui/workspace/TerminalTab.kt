@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
@@ -52,6 +51,7 @@ import com.termux.terminal.TerminalSession
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import com.mrndtvndv.term.ui.topBarsPadding
 
 /**
  * A terminal tab. Opens the tab's shell when it becomes the active page and no terminal is
@@ -261,7 +261,7 @@ private const val LISTING_DELAY_MILLIS = 600L
 @Composable
 private fun OpeningTerminal(failure: String?, onRetry: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().statusBarsPadding().padding(24.dp),
+        modifier = Modifier.fillMaxSize().topBarsPadding().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {

@@ -5,7 +5,7 @@ import com.mrndtvndv.term.data.prefs.AppSettings
 @Suppress("LongParameterList")
 class SettingsState(
     val settings: AppSettings,
-    val fontSizeRange: IntRange,
+    val fontSizeRange: ClosedFloatingPointRange<Float>,
     val onUpdate: ((AppSettings) -> AppSettings) -> Unit,
     val onSelectFont: () -> Unit,
     val onClearFont: () -> Unit,

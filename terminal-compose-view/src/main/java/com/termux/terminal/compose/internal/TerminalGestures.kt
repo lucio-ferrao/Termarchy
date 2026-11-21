@@ -24,6 +24,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.input.pointer.positionChanged
@@ -189,6 +190,8 @@ private suspend fun AwaitPointerEventScope.handleTerminalGesture(
         requireUnconsumed = false,
         pass = PointerEventPass.Initial
     )
+    // A mouse goes through terminalMouse: a drag selects or reaches the program instead of scrolling.
+    if (down.type == PointerType.Mouse) return
     velocityTracker.resetTracking()
     velocityTracker.addPosition(down.uptimeMillis, down.position)
     context.controller.beginScrollGesture()
@@ -459,22 +462,33 @@ internal fun tapMouseEventsForPosition(
     metrics: TerminalMetrics,
     button: Int = TerminalPointerEvent.BUTTON_LEFT
 ): List<TerminalPointerEvent> {
-    val press = TerminalPointerEvent(
-        action = TerminalPointerEvent.Action.PRESS,
-        button = button,
-        xPx = x,
-        yPx = y,
-        cellWidthPx = metrics.cellWidthPx,
-        cellHeightPx = metrics.cellHeightPx,
-        lineSpacingAndAscentPx = metrics.lineSpacingAndAscentPx,
-        viewportWidthPx = metrics.viewportWidthPx,
-        viewportHeightPx = metrics.viewportHeightPx
-    )
+    val press = pointerEventAt(TerminalPointerEvent.Action.PRESS, button, x, y, metrics)
     return listOf(press, press.copy(action = TerminalPointerEvent.Action.RELEASE))
 }
 
+/** One pointer event at a canvas position, with the geometry the backend needs to find the cell. */
+internal fun pointerEventAt(
+    action: TerminalPointerEvent.Action,
+    button: Int,
+    x: Float,
+    y: Float,
+    metrics: TerminalMetrics,
+    modifiers: Int = 0
+): TerminalPointerEvent = TerminalPointerEvent(
+    action = action,
+    button = button,
+    xPx = x,
+    yPx = y,
+    cellWidthPx = metrics.cellWidthPx,
+    cellHeightPx = metrics.cellHeightPx,
+    lineSpacingAndAscentPx = metrics.lineSpacingAndAscentPx,
+    viewportWidthPx = metrics.viewportWidthPx,
+    viewportHeightPx = metrics.viewportHeightPx,
+    modifiers = modifiers
+)
+
 /** Hit-tests a tap against the frame's visible link layout. */
-private fun linkAt(frame: TerminalFrame?, x: Float, y: Float, metrics: TerminalMetrics): String? {
+internal fun linkAt(frame: TerminalFrame?, x: Float, y: Float, metrics: TerminalMetrics): String? {
     if (frame == null) return null
     val column = metrics.xToColumn(x)
     val row = metrics.yToRow(y, frame.topRow)
