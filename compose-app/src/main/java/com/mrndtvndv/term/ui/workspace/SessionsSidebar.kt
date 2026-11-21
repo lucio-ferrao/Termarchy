@@ -64,8 +64,8 @@ internal fun sessionsSidebarShown(): Boolean {
  * The sessions of the grid in its order, one line each with its state mark, under their spaces as headings, in the
  * look of herdr's sidebar; the one on screen is highlighted and a tap goes to another. The grid's actions are here
  * too: a long press opens a session's menu (rename, float, close) or, dragged, moves it beside another, and the last
- * line creates one. Beside the terminal in desktop mode, [SIDEBAR_WIDTH] wide; on the phone, a page of its own left
- * of the first session.
+ * line creates one. Beside the terminal in desktop mode, [SIDEBAR_WIDTH] wide; on the phone, half the screen beside it
+ * (see [SessionsDrawer]), its lines laid out by [verticalArrangement].
  */
 @Composable
 internal fun SessionsSidebar(
@@ -74,6 +74,7 @@ internal fun SessionsSidebar(
     addOptions: TabAddOptions,
     onSelect: (id: String) -> Unit,
     modifier: Modifier = Modifier,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
 ) {
     val palette = herdrStatusColors()
     val font = herdrFont()
@@ -85,6 +86,7 @@ internal fun SessionsSidebar(
     }
     LazyColumn(
         state = listState,
+        verticalArrangement = verticalArrangement,
         modifier = modifier
             .fillMaxHeight()
             .background(palette.panel)

@@ -13,11 +13,9 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -28,13 +26,10 @@ import androidx.compose.ui.unit.Velocity
 import com.mrndtvndv.term.CrashBreadcrumbs
 import com.mrndtvndv.term.workspace.Tab
 import kotlin.math.abs
-import kotlinx.coroutines.launch
 
 /**
  * Pages [tabs] horizontally. [currentTabId] is the source of truth; the pager is a view of it
  * and reports user-driven page changes through [onSelectTab]. [empty] is shown instead of pages when there are no tabs.
- * [leading], when given, is one more page left of the first tab, which selects no tab: it gets whether the pager rests
- * on it, and a function that goes back to the current tab. Selecting another tab from it is enough: the pager follows.
  */
 @Composable
 fun WorkspacePager(
@@ -43,16 +38,12 @@ fun WorkspacePager(
     onSelectTab: (Tab) -> Unit,
     empty: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-    leading: (@Composable (shown: Boolean, showCurrent: () -> Unit) -> Unit)? = null,
     content: @Composable (tab: Tab, isActive: Boolean) -> Unit,
 ) {
-    // the pages before the first tab
-    val offset = if (leading != null) 1 else 0
     val pagerState = rememberPagerState(
-        initialPage = tabs.indexOfFirst { it.id == currentTabId }.coerceAtLeast(0) + offset,
-        pageCount = { tabs.size + offset }
+        initialPage = tabs.indexOfFirst { it.id == currentTabId }.coerceAtLeast(0),
+        pageCount = { tabs.size }
     )
-    val scope = rememberCoroutineScope()
     val flingBehavior = PagerDefaults.flingBehavior(
         state = pagerState,
         pagerSnapDistance = PagerSnapDistance.atMost(1),
@@ -60,7 +51,7 @@ fun WorkspacePager(
 
     val pageNestedScrollConnection = rememberHorizontalDominantConnection(pagerState)
 
-    PagerSyncEffects(pagerState, tabs, offset, currentTabId, onSelectTab)
+    PagerSyncEffects(pagerState, tabs, currentTabId, onSelectTab)
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -81,18 +72,10 @@ fun WorkspacePager(
             // list-instance changes without teardown. Keys must be Bundle-storable:
             // Lazy layouts route page keys through SaveableStateProvider, which crashes
             // on arbitrary objects.
-            key = { index -> if (index < offset) "leading" else tabs.getOrNull(index - offset)?.id ?: "page:$index" },
+            key = { index -> tabs.getOrNull(index)?.id ?: "page:$index" },
             modifier = pageModifier.clipToBounds(),
         ) { page ->
-            if (page < offset) {
-                leading?.invoke(pagerState.settledPage == page && !pagerState.isScrollInProgress) {
-                    // sliding in from the right, as a swipe would
-                    val index = tabs.indexOfFirst { it.id == currentTabId }
-                    if (index >= 0) scope.launch { pagerState.animateScrollToPage(index + offset) }
-                }
-                return@HorizontalPager
-            }
-            tabs.getOrNull(page - offset)?.let { tab ->
+            tabs.getOrNull(page)?.let { tab ->
                 val isActive = tab.id == currentTabId &&
                     pagerState.settledPage == page &&
                     !pagerState.isScrollInProgress
@@ -122,41 +105,42 @@ private fun rememberHorizontalDominantConnection(pagerState: PagerState): Nested
 private fun PagerSyncEffects(
     pagerState: PagerState,
     tabs: List<Tab>,
-    offset: Int,
     currentTabId: String?,
     onSelectTab: (Tab) -> Unit,
 ) {
-    val currentTabPage = tabs.indexOfFirst { it.id == currentTabId }.let { if (it < 0) it else it + offset }
+    val targetIndex = tabs.indexOfFirst { it.id == currentTabId }
     val latestTabs by rememberUpdatedState(tabs)
     val latestCurrentTabId by rememberUpdatedState(currentTabId)
 
     // The only place that moves the pager to the active tab (tab taps, notifications, closes).
-    // Keyed on the tab and its index, not the tab list: the list changes on every model update (an SFTP
-    // tab saving its dir), which must not restart these effects. A tab chosen on a leading page can land on the index
-    // the current one had, so the tab is a key too. Skipping when already
+    // Keyed on the index, not the tab list: the list changes on every model update (an SFTP
+    // tab saving its dir), which must not restart these effects. Skipping when already
     // at/heading to the page avoids re-animating, which replaces pager nodes mid-layout.
     // Swipes move the pager themselves; this only follows the app's own changes, and goes straight there: a page
     // becomes active, and opens its shell, only once the pager settles, and a list usually covers the pager anyway.
-    var followedTabId by remember { mutableStateOf(currentTabId) }
-    LaunchedEffect(currentTabId, currentTabPage) {
-        val sameTab = followedTabId == currentTabId
-        followedTabId = currentTabId
-        if (currentTabPage < 0 || pagerState.targetPage == currentTabPage) return@LaunchedEffect
-        // on a leading page, the same tab only moving (another one listed before it) does not take the pager away
-        if (sameTab && pagerState.targetPage < offset) return@LaunchedEffect
-        // a tab chosen on a leading page slides in from the right, as a swipe would
-        if (pagerState.targetPage < offset) {
-            pagerState.animateScrollToPage(currentTabPage)
-        } else {
-            pagerState.scrollToPage(currentTabPage)
+    LaunchedEffect(targetIndex) {
+        if (targetIndex < 0 || pagerState.targetPage == targetIndex) return@LaunchedEffect
+        pagerState.scrollToPage(targetIndex)
+    }
+    // Another tab chosen goes to its page in the same remeasure as the list change: left to itself the pager keeps the
+    // tab it shows by its key, and settling there would select that tab back (on the phone the pages start at the current
+    // tab, so choosing one listed before it moves the one left behind, not the index).
+    val shown = remember { ShownTab(tabs, currentTabId) }
+    SideEffect {
+        // the pager has not measured the new list yet: its page is still one of the tabs before
+        val shownId = shown.tabs.getOrNull(pagerState.currentPage)?.id
+        if (currentTabId != shown.currentTabId && targetIndex >= 0 && shownId != currentTabId) {
+            pagerState.requestScrollToPage(targetIndex)
         }
+        shown.tabs = tabs
+        shown.currentTabId = currentTabId
     }
 
     // Tabs can be closed while the pager sits on the removed page. Snap to a valid page
     // immediately; leaving currentPage out of bounds breaks the pager's layout.
     LaunchedEffect(tabs.size) {
-        if (tabs.isNotEmpty() && pagerState.currentPage >= tabs.size + offset) {
-            pagerState.scrollToPage(currentTabPage.coerceIn(offset, tabs.lastIndex + offset))
+        if (tabs.isNotEmpty() && pagerState.currentPage >= tabs.size) {
+            pagerState.scrollToPage(targetIndex.coerceIn(0, tabs.lastIndex))
         }
     }
 
@@ -165,8 +149,7 @@ private fun PagerSyncEffects(
     // Keyed on settledPage alone (the idle page): re-running on a tab-list change while a
     // tap's scroll is still in flight would select the old page and undo the tap.
     LaunchedEffect(pagerState.settledPage) {
-        // a leading page selects no tab
-        val tab = latestTabs.getOrNull(pagerState.settledPage - offset)
+        val tab = latestTabs.getOrNull(pagerState.settledPage)
         CrashBreadcrumbs.setWorkspace(
             tab = tab?.typeName ?: "none",
             page = pagerState.settledPage,
@@ -178,6 +161,9 @@ private fun PagerSyncEffects(
         }
     }
 }
+
+/** The tabs and the current one at the last composition, to tell which tab the pager shows before it measures anew. */
+private class ShownTab(var tabs: List<Tab>, var currentTabId: String?)
 
 private val Tab.typeName: String
     get() = when (this) {
